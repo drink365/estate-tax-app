@@ -11,7 +11,7 @@ PARENTS_DEDUCTION = 138       # 父母扣除額（萬）
 DISABLED_DEDUCTION = 693      # 重度以上身心障礙扣除額（萬）
 OTHER_DEPENDENTS_DEDUCTION = 56  # 其他撫養扣除額（萬）
 
-# 模擬中以20%單一稅率作為示例，您原先的稅率結構保持不變
+# 台灣 2025 年累進稅率結構 (上限, 稅率)
 TAX_BRACKETS = [
     (5621, 0.1),
     (11242, 0.15),
@@ -25,6 +25,7 @@ def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_d
     計算遺產稅，若扣除額總和超過總遺產，則拋出錯誤。
     回傳值：(課稅遺產淨額, 預估遺產稅, 總扣除額)
     """
+    # 計算總扣除額
     deductions = (
         spouse_deduction +
         FUNERAL_EXPENSE +
@@ -54,40 +55,28 @@ def generate_basic_advice(taxable_amount, tax_due):
     )
 
 def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
-    """
-    模擬保單規劃策略：
-    - 假設保險理賠金 = 向上取整至最近 10 萬（例如 297 萬變成 300 萬）
-    - 假設保費 = 假設保險理賠金 / 1.5
-    模擬兩種情境：
-      1. 【有規劃保單（未被實質課稅）】：
-         扣除假設保費後遺產 = 總遺產 - 假設保費  
-         預估稅額 = 稅額(扣除假設保費後遺產)  
-         家人總共可得 = (扣除假設保費後遺產 - 預估稅額) + 假設保險理賠金
-      2. 【有規劃保單（被實質課稅）】：
-         假設新遺產 = (總遺產 - 假設保費 + 假設保險理賠金)
-         預估稅額 = 稅額(新遺產)
-         家人總共可得 = 新遺產 - 預估稅額
-    並計算規劃效果（較原始情況增加的金額）。
-    """
     # 原始情況
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_no_insurance = total_assets - tax_no_insurance
 
-    # 假設方案
+    # 假設的保險方案：保險理賠金向上取整至最近10萬，保費 = 理賠金 / 1.5
     assumed_payout = round(math.ceil(tax_no_insurance / 10) * 10, 2)
     assumed_premium = round(assumed_payout / 1.5, 2)
 
-    # 未被實質課稅：稅額基數不包含理賠金
+    # 模擬「未被實質課稅」：扣除假設保費後的新遺產重新計稅
     new_total_assets = total_assets - assumed_premium
-    _, tax_not_taxed, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
-    net_not_taxed = round((new_total_assets - tax_not_taxed) + assumed_payout, 2)
-    effect_not_taxed = round(net_not_taxed - net_no_insurance, 2)
+    try:
+        _, tax_with_insurance, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    except Exception:
+        tax_with_insurance = 0
+    family_not_taxed = round((new_total_assets - tax_with_insurance) + assumed_payout, 2)
+    effect_not_taxed = round(family_not_taxed - net_no_insurance, 2)
 
-    # 被實質課稅：稅額基數包含理賠金
-    taxable_with_benefit = total_assets - assumed_premium + assumed_payout
-    _, tax_taxed, _ = calculate_estate_tax(taxable_with_benefit, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
-    net_taxed = round(taxable_with_benefit - tax_taxed, 2)
-    effect_taxed = round(net_taxed - net_no_insurance, 2)
+    # 模擬「被實質課稅」：將假設保險理賠金加入課稅計算
+    effective_estate = new_total_assets + assumed_payout
+    _, tax_effective, _ = calculate_estate_tax(effective_estate, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    family_taxed = round(effective_estate - tax_effective, 2)
+    effect_taxed = round(family_taxed - net_no_insurance, 2)
 
     return {
         "原始情況": {
@@ -99,59 +88,49 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
             "假設保費": assumed_premium,
             "假設保險理賠金": assumed_payout,
             "扣除保費後遺產": new_total_assets,
-            "預估稅額": tax_not_taxed,
-            "家人總共可得": net_not_taxed,
+            "預估稅額": tax_with_insurance,
+            "家人總共可得": family_not_taxed,
             "規劃效果": effect_not_taxed
         },
         "有規劃保單 (被實質課稅)": {
             "假設保費": assumed_premium,
             "假設保險理賠金": assumed_payout,
-            "家人總共可得": net_taxed,
+            "家人總共可得": family_taxed,
             "規劃效果": effect_taxed
         }
     }
 
 def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years):
-    """
-    模擬提前贈與策略：
-    假設每年可贈與 244 萬免稅額度，
-    總贈與金額 = years * 244 萬，
-    規劃後遺產 = 原始遺產總額 - 總贈與金額，
-    重新計算稅額後，家人總共可得 = (規劃後遺產 - 預估稅額) + 總贈與金額。
-    並與原始情況比較，計算規劃效果。
-    """
     annual_gift_exemption = 244
     total_gift = years * annual_gift_exemption
     simulated_total_assets = max(total_assets - total_gift, 0)
-    _, tax_due_sim, _ = calculate_estate_tax(simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
-    net_after = round((simulated_total_assets - tax_due_sim) + total_gift, 2)
+    try:
+        _, tax_due_sim, _ = calculate_estate_tax(simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    except Exception:
+        return None
+    family_after = round((simulated_total_assets - tax_due_sim) + total_gift, 2)
     _, tax_due_original, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
-    net_original = total_assets - tax_due_original
-    saved = round(net_after - net_original, 2)
+    family_original = total_assets - tax_due_original
+    effect = round(family_after - family_original, 2)
 
     return {
         "原始情況": {
             "遺產總額": total_assets,
             "預估稅額": tax_due_original,
-            "家人總共可得": net_original
+            "家人總共可得": family_original
         },
         "提前贈與後": {
             "遺產總額": simulated_total_assets,
             "預估稅額": tax_due_sim,
             "總贈與金額": round(total_gift, 2),
-            "家人總共可得": net_after
+            "家人總共可得": family_after
         },
         "規劃效果": {
-            "較原始情況增加": saved
+            "較原始情況增加": effect
         }
     }
 
 def simulate_diversified_strategy(tax_due):
-    """
-    模擬分散資產配置策略：
-    假設可降低 10% 稅額，即最終稅額 = 原稅額的 90%，
-    並計算規劃效果及節省百分比。
-    """
     simulated_tax_due = round(tax_due * 0.9, 2)
     saved_div = round(tax_due - simulated_tax_due, 2)
     percent_saved_div = round((saved_div / tax_due) * 100, 2) if tax_due else 0
@@ -216,7 +195,7 @@ def main():
         return
 
     st.markdown("<div class='data-card'>", unsafe_allow_html=True)
-    st.subheader(f"預估遺產稅：{tax_due:,.2f} 萬元")
+    st.subheader(f"預估遺產稅：{round(tax_due,2):,.2f} 萬元")
     
     col1, col2, col3 = st.columns(3)
     with col1:
