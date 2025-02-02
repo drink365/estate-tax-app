@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import math
 
 # === 常數設定 ===
 EXEMPT_AMOUNT = 1333          # 免稅額（萬）
@@ -57,26 +57,44 @@ def generate_basic_advice(taxable_amount, tax_due):
     根據計算結果生成基本的 AI 規劃建議文字
     """
     return (
-        "根據您的計算結果，建議您考慮以下策略來降低遺產稅負擔：\n"
-        "1. 規劃保單，預留遺產稅資金\n"
-        "2. 提前贈與，逐步轉移財富\n"
-        "3. 分散資產配置，降低稅務影響"
+        "建議您考慮以下三種策略：\n"
+        "1. 規劃保單：保單保額至少應等同於遺產稅，建議向上取整至 10 萬，例如 297.6 萬建議購買 300 萬保額。\n"
+        "2. 提前贈與：利用每年 244 萬的免稅額度，逐年轉移財富，減少遺產總額。\n"
+        "3. 分散資產配置：透過優化資產配置，降低累進稅率影響，假設可降低 10% 稅額。"
     )
 
-def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, reduction_rate=0.1):
+def simulate_insurance_strategy(tax_due):
+    """
+    模擬保單規劃策略：
+    建議的保險額度為遺產稅向上取整至最近 10 萬
+    """
+    recommended_insurance = math.ceil(tax_due / 10) * 10
+    return recommended_insurance
+
+def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years):
     """
     模擬提前贈與策略：
-    假設透過提前贈與將總遺產降低一定比例 (預設 10%)，計算新的遺產稅情況
+    假設每年可贈與 244 萬免稅額度，總贈與金額 = years * 244 萬
+    用此金額降低總遺產，再重新計算稅額
     """
-    simulated_total_assets = total_assets * (1 - reduction_rate)
+    annual_gift_exemption = 244
+    total_gift = years * annual_gift_exemption
+    simulated_total_assets = max(total_assets - total_gift, 0)
     try:
         taxable_sim, tax_due_sim, _ = calculate_estate_tax(
             simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
         )
     except Exception as e:
-        # 若發生錯誤，返回 None
         return None, None, simulated_total_assets
     return taxable_sim, tax_due_sim, simulated_total_assets
+
+def simulate_diversified_strategy(tax_due):
+    """
+    模擬分散資產配置策略：
+    假設可降低 10% 稅額，即最終稅額為原稅額的 90%
+    """
+    simulated_tax_due = tax_due * 0.9
+    return round(simulated_tax_due, 2)
 
 def inject_custom_css():
     """
@@ -214,25 +232,42 @@ def main():
         st.table(df_tax)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # 基本的 AI 規劃建議
+    # 顯示基本 AI 規劃建議
     st.markdown("## 家族傳承策略建議")
     st.text(generate_basic_advice(taxable_amount, tax_due))
     
-    # --- 模擬情境：提前贈與策略 ---
-    with st.expander("情境模擬：假設提前贈與降低10%的遺產金額"):
+    # --- 模擬情境：分別對三種策略進行模擬 ---
+    st.markdown("### 模擬情境")
+    
+    # 模擬 1：保單規劃策略
+    with st.expander("1. 規劃保單策略"):
+        recommended_insurance = simulate_insurance_strategy(tax_due)
+        st.markdown(f"**建議保險額度：** {recommended_insurance:,.0f} 萬（足以支付遺產稅）")
+    
+    # 模擬 2：提前贈與策略
+    with st.expander("2. 提前贈與策略"):
+        years = st.slider("設定提前贈與年數", min_value=1, max_value=10, value=3, step=1)
         sim_taxable, sim_tax_due, sim_total_assets = simulate_gift_strategy(
-            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, reduction_rate=0.10
+            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years
         )
         if sim_taxable is None:
             st.error("模擬計算發生錯誤，請檢查輸入數值。")
         else:
             st.markdown(f"原始總遺產：**{total_assets:,.2f} 萬元**")
-            st.markdown(f"模擬後總遺產（提前贈與10%）：**{sim_total_assets:,.2f} 萬元**")
+            st.markdown(f"模擬後總遺產（提前贈與 {years} 年，共計可免稅 {years*244:,.0f} 萬）：**{sim_total_assets:,.2f} 萬元**")
             st.markdown(f"原始預估稅額：**{tax_due:,.2f} 萬元**")
             st.markdown(f"模擬預估稅額：**{sim_tax_due:,.2f} 萬元**")
             saved = tax_due - sim_tax_due
             percent_saved = (saved / tax_due) * 100 if tax_due else 0
             st.markdown(f"節省稅額：**{saved:,.2f} 萬元**，約節省 **{percent_saved:.1f}%**")
+    
+    # 模擬 3：分散資產配置策略
+    with st.expander("3. 分散資產配置策略"):
+        simulated_div_tax = simulate_diversified_strategy(tax_due)
+        st.markdown(f"模擬後預估稅額：**{simulated_div_tax:,.2f} 萬元**")
+        saved_div = tax_due - simulated_div_tax
+        percent_saved_div = (saved_div / tax_due) * 100 if tax_due else 0
+        st.markdown(f"節省稅額：**{saved_div:,.2f} 萬元**，約節省 **{percent_saved_div:.1f}%**")
     
 if __name__ == "__main__":
     main()
