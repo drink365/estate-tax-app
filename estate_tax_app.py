@@ -18,7 +18,7 @@ TAX_BRACKETS = [
     (float('inf'), 0.2)
 ]
 
-# === 核心計算邏輯，並使用 st.cache_data 提升效能 ===
+# === 核心計算邏輯，使用 st.cache_data 提升效能 ===
 @st.cache_data
 def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
@@ -58,35 +58,63 @@ def generate_basic_advice(taxable_amount, tax_due):
     """
     return (
         "建議您考慮以下三種策略：\n"
-        "1. 規劃保單：保單保額至少應等同於遺產稅，建議向上取整至 10 萬，例如 297.6 萬建議購買 300 萬保額。\n"
-        "2. 提前贈與：利用每年 244 萬的免稅額度，逐年轉移財富，減少遺產總額。\n"
-        "3. 分散資產配置：透過優化資產配置，降低累進稅率影響，假設可降低 10% 稅額。"
+        "1. 規劃保單：透過購買適當的保險，您可用保費（例如 200 萬）從遺產中扣除，並在理賠時獲得更高的金額（例如 300 萬），不僅降低課稅基數，還能提供家人流動資金支持。\n"
+        "2. 提前贈與：利用每年 244 萬的免稅贈與額度，逐年轉移財富，降低遺產總額。\n"
+        "3. 分散資產配置：透過優化資產配置，有效降低累進稅率影響，進而減輕稅負。"
     )
 
-def simulate_insurance_strategy(tax_due):
+# --- 模擬策略函數 ---
+
+def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
     模擬保單規劃策略：
-    建議的保險額度為遺產稅向上取整至最近 10 萬
+    假設購買保險：保費 200 萬、理賠金 300 萬。
+    - 未規劃保險：以原遺產總額計算稅額，家人可拿到：total_assets - tax_no_insurance
+    - 有規劃保險（理想狀態，不被課稅）：計算新遺產 = total_assets - 保費，再計算稅額，
+      家人最終可拿到：(new_estate - new_tax) + 理賠金
+    - 有規劃保險（實際狀況，部分被課稅）：假設淨效果為家人可額外增加 100 萬。
+    回傳一個字典，包含上述三種情境的結果。
     """
-    recommended_insurance = math.ceil(tax_due / 10) * 10
-    return recommended_insurance
+    premium = 200
+    benefit = 300
+
+    # 模擬未規劃保險
+    _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    net_no_insurance = total_assets - tax_no_insurance
+
+    # 模擬有規劃保險（理想狀態：保單理賠金完全免稅）
+    new_total_assets = total_assets - premium
+    try:
+        _, tax_with_insurance, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    except Exception as e:
+        tax_with_insurance = 0
+    net_insurance_tax_free = (new_total_assets - tax_with_insurance) + benefit
+
+    # 模擬有規劃保險（實際狀況，假設淨增加 100 萬效果）
+    net_insurance_taxed = net_no_insurance + 100
+
+    return {
+        "未規劃保險": net_no_insurance,
+        "有規劃保險 (免稅理賠)": net_insurance_tax_free,
+        "有規劃保險 (被課稅，淨增100萬)": net_insurance_taxed
+    }
 
 def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years):
     """
     模擬提前贈與策略：
-    假設每年可贈與 244 萬免稅額度，總贈與金額 = years * 244 萬
-    用此金額降低總遺產，再重新計算稅額
+    假設每年可贈與 244 萬免稅額度，總贈與金額 = years * 244 萬，
+    用此金額降低總遺產，再重新計算稅額。
     """
     annual_gift_exemption = 244
     total_gift = years * annual_gift_exemption
     simulated_total_assets = max(total_assets - total_gift, 0)
     try:
-        taxable_sim, tax_due_sim, _ = calculate_estate_tax(
+        _, tax_due_sim, _ = calculate_estate_tax(
             simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
         )
     except Exception as e:
         return None, None, simulated_total_assets
-    return taxable_sim, tax_due_sim, simulated_total_assets
+    return simulated_total_assets, tax_due_sim, total_gift
 
 def simulate_diversified_strategy(tax_due):
     """
@@ -236,26 +264,32 @@ def main():
     st.markdown("## 家族傳承策略建議")
     st.text(generate_basic_advice(taxable_amount, tax_due))
     
-    # --- 模擬情境：分別對三種策略進行模擬 ---
     st.markdown("### 模擬情境")
     
     # 模擬 1：保單規劃策略
     with st.expander("1. 規劃保單策略"):
-        recommended_insurance = simulate_insurance_strategy(tax_due)
-        st.markdown(f"**建議保險額度：** {recommended_insurance:,.0f} 萬（足以支付遺產稅）")
+        insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+        st.markdown("**保單規劃策略說明：**")
+        st.markdown(
+            "透過購買保險，您可以用 200 萬的保費從遺產中扣除，降低課稅基數；而家人可在保險理賠時獲得 300 萬現金，"
+            "不僅能減輕稅負，還提供了繼承發生時所需的流動資金。"
+        )
+        st.markdown(f"未規劃保險時，家人最終可得：約 **{insurance_results['未規劃保險']:,.2f} 萬元**")
+        st.markdown(f"有規劃保險（免稅理賠）時，家人最終可得：約 **{insurance_results['有規劃保險 (免稅理賠)']:,.2f} 萬元**")
+        st.markdown(f"有規劃保險（部分被課稅）時，家人最終可得：約 **{insurance_results['有規劃保險 (被課稅，淨增100萬)']:,.2f} 萬元**")
     
     # 模擬 2：提前贈與策略
     with st.expander("2. 提前贈與策略"):
         years = st.slider("設定提前贈與年數", min_value=1, max_value=10, value=3, step=1)
-        sim_taxable, sim_tax_due, sim_total_assets = simulate_gift_strategy(
+        sim_total_assets, sim_tax_due, total_gift = simulate_gift_strategy(
             total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years
         )
-        if sim_taxable is None:
+        if sim_total_assets is None:
             st.error("模擬計算發生錯誤，請檢查輸入數值。")
         else:
             st.markdown(f"原始總遺產：**{total_assets:,.2f} 萬元**")
-            st.markdown(f"模擬後總遺產（提前贈與 {years} 年，共計可免稅 {years*244:,.0f} 萬）：**{sim_total_assets:,.2f} 萬元**")
-            st.markdown(f"原始預估稅額：**{tax_due:,.2f} 萬元**")
+            st.markdown(f"提前贈與 {years} 年，共可免稅：**{total_gift:,.0f} 萬元**")
+            st.markdown(f"模擬後總遺產：**{sim_total_assets:,.2f} 萬元**")
             st.markdown(f"模擬預估稅額：**{sim_tax_due:,.2f} 萬元**")
             saved = tax_due - sim_tax_due
             percent_saved = (saved / tax_due) * 100 if tax_due else 0
