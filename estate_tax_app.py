@@ -69,40 +69,58 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     """
     模擬保單規劃策略：
     假設購買保險：保費 200 萬、理賠金 300 萬。
-    - 未規劃保險：以原遺產總額計算稅額，家人可得：total_assets - tax_no_insurance
-    - 有規劃保險（未被實質課稅）：新遺產 = total_assets - 200 萬，再計算稅額，家人可得：(新遺產 - new_tax) + 300 萬
-    - 有規劃保險（被實質課稅）：模擬效果假設家人最終可額外增加 100 萬
-    回傳一個字典，包含上述三種情境的結果。
+    分別顯示：
+    - 【原始情況】：未規劃保險時的遺產總額、預估稅額及家人最終可得。
+    - 【有規劃保單（未被實質課稅）】：扣除 200 萬保費後重新計算稅額，家人最終可得 = (遺產總額-200萬 - 新稅額) + 300萬。
+    - 【有規劃保單（被實質課稅）】：模擬效果假設家人最終可額外增加 100 萬。
+    並計算各情境相對於原始情況的規劃效果。
     """
     premium = 200
     benefit = 300
 
-    # 模擬未規劃保險
+    # 原始情況
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_no_insurance = total_assets - tax_no_insurance
 
-    # 模擬有規劃保險（未被實質課稅）
+    # 模擬有規劃保單（未被實質課稅）
     new_total_assets = total_assets - premium
     try:
         _, tax_with_insurance, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     except Exception as e:
         tax_with_insurance = 0
     net_insurance_not_taxed = (new_total_assets - tax_with_insurance) + benefit
+    effect_not_taxed = net_insurance_not_taxed - net_no_insurance
 
-    # 模擬有規劃保險（被實質課稅，模擬效果假設額外增加 100 萬）
-    net_insurance_taxed = net_no_insurance + 100
+    # 模擬有規劃保單（被實質課稅）
+    net_insurance_taxed = net_no_insurance + 100  # 假設效果：額外增加 100 萬
+    effect_taxed = net_insurance_taxed - net_no_insurance
 
     return {
-        "未規劃保險": net_no_insurance,
-        "有規劃保險 (未被實質課稅)": net_insurance_not_taxed,
-        "有規劃保險 (被實質課稅)": net_insurance_taxed
+        "原始情況": {
+            "遺產總額": total_assets,
+            "預估稅額": tax_no_insurance,
+            "家人最終可得": net_no_insurance
+        },
+        "有規劃保單 (未被實質課稅)": {
+            "扣除保費後遺產": new_total_assets,
+            "預估稅額": tax_with_insurance,
+            "家人最終可得": net_insurance_not_taxed,
+            "規劃效果": effect_not_taxed
+        },
+        "有規劃保單 (被實質課稅)": {
+            "家人最終可得": net_insurance_taxed,
+            "規劃效果": effect_taxed,
+            "說明": "模擬效果假設家人最終可額外增加 100 萬"
+        }
     }
 
 def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years):
     """
     模擬提前贈與策略：
     假設每年可贈與 244 萬免稅額度，總贈與金額 = years * 244 萬，
-    用此金額降低總遺產，再重新計算稅額。
+    規劃後遺產 = 原始遺產總額 - 總贈與金額，
+    重新計算稅額後，家人最終可得 = (規劃後遺產 - 新稅額)。
+    並與原始情況比較，計算節省稅額及節省百分比。
     """
     annual_gift_exemption = 244
     total_gift = years * annual_gift_exemption
@@ -112,16 +130,55 @@ def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other
             simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
         )
     except Exception as e:
-        return None, None, simulated_total_assets
-    return simulated_total_assets, tax_due_sim, total_gift
+        return None
+    net_after = simulated_total_assets - tax_due_sim
+    # 原始情況
+    _, tax_due_original, _ = calculate_estate_tax(
+        total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
+    )
+    net_original = total_assets - tax_due_original
+    saved = tax_due_original - tax_due_sim
+    percent_saved = (saved / tax_due_original) * 100 if tax_due_original else 0
+
+    return {
+        "原始情況": {
+            "遺產總額": total_assets,
+            "預估稅額": tax_due_original,
+            "家人最終可得": net_original
+        },
+        "提前贈與後": {
+            "遺產總額": simulated_total_assets,
+            "預估稅額": tax_due_sim,
+            "家人最終可得": net_after,
+            "總贈與金額": total_gift
+        },
+        "規劃效果": {
+            "節省稅額": saved,
+            "節省百分比": percent_saved
+        }
+    }
 
 def simulate_diversified_strategy(tax_due):
     """
     模擬分散資產配置策略：
-    假設可降低 10% 稅額，即最終稅額為原稅額的 90%
+    假設可降低 10% 稅額，即最終稅額 = 原稅額的 90%，
+    並計算節省金額及百分比。
     """
     simulated_tax_due = tax_due * 0.9
-    return round(simulated_tax_due, 2)
+    saved_div = tax_due - simulated_tax_due
+    percent_saved_div = (saved_div / tax_due) * 100 if tax_due else 0
+    return {
+        "原始情況": {
+            "預估稅額": tax_due
+        },
+        "分散資產配置後": {
+            "預估稅額": round(simulated_tax_due, 2)
+        },
+        "規劃效果": {
+            "節省稅額": round(saved_div, 2),
+            "節省百分比": round(percent_saved_div, 1)
+        }
+    }
 
 def inject_custom_css():
     """
@@ -270,35 +327,54 @@ def main():
         insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("**保單規劃策略說明：**")
         st.markdown("透過購買適當的保險，有機會降低課稅基數，還能提供家人流動資金支持。")
-        st.markdown("舉例：保費 200 萬從遺產中扣除，降低課稅基數；家人獲得 300 萬保險理賠金，不僅能減輕稅負，還提供了繼承發生時所需的流動資金。")
-        st.markdown(f"未規劃保險時，家人最終可得：約 **{insurance_results['未規劃保險']:,.2f} 萬元**")
-        st.markdown(f"有規劃保險（未被實質課稅）時，家人最終可得：約 **{insurance_results['有規劃保險 (未被實質課稅)'] if '有規劃保險 (未被實質課稅)' in insurance_results else insurance_results['有規劃保險 (免稅理賠)']:,.2f} 萬元**")
-        st.markdown(f"有規劃保險（被實質課稅）時，家人最終可得：約 **{insurance_results['有規劃保險 (被實質課稅)'] if '有規劃保險 (被實質課稅)' in insurance_results else insurance_results['有規劃保險 (被課稅，淨增100萬)']:,.2f} 萬元**")
+        st.markdown("【原始情況】")
+        original = insurance_results["原始情況"]
+        st.markdown(f"遺產總額：**{original['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"預估稅額：**{original['預估稅額']:,.2f} 萬元**")
+        st.markdown(f"家人最終可得：**{original['家人最終可得']:,.2f} 萬元**")
+        st.markdown("【有規劃保單（未被實質課稅）】")
+        not_taxed = insurance_results["有規劃保單 (未被實質課稅)"]
+        st.markdown(f"扣除保費後遺產：**{not_taxed['扣除保費後遺產']:,.2f} 萬元**")
+        st.markdown(f"預估稅額：**{not_taxed['預估稅額']:,.2f} 萬元**")
+        st.markdown(f"家人最終可得：**{not_taxed['家人最終可得']:,.2f} 萬元**")
+        st.markdown(f"規劃效果：較原始情況增加 **{not_taxed['規劃效果']:,.2f} 萬元**")
+        st.markdown("【有規劃保單（被實質課稅）】")
+        taxed = insurance_results["有規劃保單 (被實質課稅)"]
+        st.markdown(f"家人最終可得：**{taxed['家人最終可得']:,.2f} 萬元**")
+        st.markdown(f"規劃效果：較原始情況增加 **{taxed['規劃效果']:,.2f} 萬元**")
+        st.markdown(f"說明：{taxed['說明']}")
     
     # 模擬 2：提前贈與策略
     with st.expander("2. 提前贈與策略"):
         years = st.slider("設定提前贈與年數", min_value=1, max_value=10, value=3, step=1)
-        sim_total_assets, sim_tax_due, total_gift = simulate_gift_strategy(
-            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years
-        )
-        if sim_total_assets is None:
+        gift_results = simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years)
+        if gift_results is None:
             st.error("模擬計算發生錯誤，請檢查輸入數值。")
         else:
-            st.markdown(f"原始總遺產：**{total_assets:,.2f} 萬元**")
-            st.markdown(f"提前贈與 {years} 年，共可免稅：**{total_gift:,.0f} 萬元**")
-            st.markdown(f"模擬後總遺產：**{sim_total_assets:,.2f} 萬元**")
-            st.markdown(f"模擬預估稅額：**{sim_tax_due:,.2f} 萬元**")
-            saved = tax_due - sim_tax_due
-            percent_saved = (saved / tax_due) * 100 if tax_due else 0
-            st.markdown(f"節省稅額：**{saved:,.2f} 萬元**，約節省 **{percent_saved:.1f}%**")
+            st.markdown("【原始情況】")
+            original_gift = gift_results["原始情況"]
+            st.markdown(f"遺產總額：**{original_gift['遺產總額']:,.2f} 萬元**")
+            st.markdown(f"預估稅額：**{original_gift['預估稅額']:,.2f} 萬元**")
+            st.markdown(f"家人最終可得：**{original_gift['家人最終可得']:,.2f} 萬元**")
+            st.markdown("【提前贈與後】")
+            after_gift = gift_results["提前贈與後"]
+            st.markdown(f"遺產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
+            st.markdown(f"預估稅額：**{after_gift['預估稅額']:,.2f} 萬元**")
+            st.markdown(f"家人最終可得：**{after_gift['家人最終可得']:,.2f} 萬元**")
+            st.markdown(f"總贈與金額：**{after_gift['總贈與金額']:,.0f} 萬元**")
+            effect_gift = gift_results["規劃效果"]
+            st.markdown(f"規劃效果：節省稅額 **{effect_gift['節省稅額']:,.2f} 萬元**，約節省 **{effect_gift['節省百分比']:.1f}%**")
     
     # 模擬 3：分散資產配置策略
     with st.expander("3. 分散資產配置策略"):
-        simulated_div_tax = simulate_diversified_strategy(tax_due)
-        st.markdown(f"模擬後預估稅額：**{simulated_div_tax:,.2f} 萬元**")
-        saved_div = tax_due - simulated_div_tax
-        percent_saved_div = (saved_div / tax_due) * 100 if tax_due else 0
-        st.markdown(f"節省稅額：**{saved_div:,.2f} 萬元**，約節省 **{percent_saved_div:.1f}%**")
+        div_results = simulate_diversified_strategy(tax_due)
+        # 因 simulate_diversified_strategy 回傳字典，所以直接顯示
+        st.markdown("【原始情況】")
+        st.markdown(f"預估稅額：**{tax_due:,.2f} 萬元**")
+        st.markdown("【分散資產配置後】")
+        st.markdown(f"預估稅額：**{div_results['分散資產配置後']['預估稅額']:,.2f} 萬元**")
+        effect_div = div_results["規劃效果"]
+        st.markdown(f"規劃效果：節省稅額 **{effect_div['節省稅額']:,.2f} 萬元**，約節省 **{effect_div['節省百分比']:.1f}%**")
     
 if __name__ == "__main__":
     main()
