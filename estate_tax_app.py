@@ -204,22 +204,25 @@ def main():
     inject_custom_css()
     st.markdown("<h1 class='main-header'>遺產稅試算工具</h1>", unsafe_allow_html=True)
     
-    st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
+    # 輸入區放在主畫面上方
+    with st.container():
+        st.markdown("### 請輸入遺產及家庭資訊", unsafe_allow_html=True)
+        total_assets = st.number_input("遺產總額（萬）", min_value=1000, max_value=100000, value=5000, step=100, help="請輸入您的總遺產金額（單位：萬）")
+        st.markdown("---")
+        st.markdown("#### 請輸入家庭成員數")
+        has_spouse = st.checkbox("是否有配偶（扣除額 553 萬）", value=False)
+        spouse_deduction = SPOUSE_DEDUCTION_VALUE if has_spouse else 0
+        adult_children = st.number_input("直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10, value=0, help="請輸入直系血親或卑親屬人數")
+        parents = st.number_input("父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2, value=0, help="請輸入父母人數")
+        max_disabled = max(1, adult_children + parents + (1 if has_spouse else 0))
+        disabled_people = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled, value=0, help="請輸入重度以上身心障礙者人數")
+        other_dependents = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0, help="請輸入兄弟姊妹或祖父母人數")
     
-    st.sidebar.header("請輸入遺產資訊")
-    total_assets = st.sidebar.number_input("遺產總額（萬）", min_value=1000, max_value=100000, value=5000, step=100, help="請輸入您的總遺產金額（單位：萬）")
-    
-    st.sidebar.subheader("扣除額（根據家庭成員數填寫）")
-    has_spouse = st.sidebar.checkbox("是否有配偶（扣除額 553 萬）", value=False)
-    spouse_deduction = SPOUSE_DEDUCTION_VALUE if has_spouse else 0
-    adult_children = st.sidebar.number_input("直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10, value=0, help="請輸入直系血親或卑親屬人數")
-    parents = st.sidebar.number_input("父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2, value=0, help="請輸入父母人數")
-    max_disabled = max(1, adult_children + parents + (1 if has_spouse else 0))
-    disabled_people = st.sidebar.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled, value=0, help="請輸入重度以上身心障礙者人數")
-    other_dependents = st.sidebar.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0, help="請輸入兄弟姊妹或祖父母人數")
-    
+    # 計算結果展示
     try:
-        taxable_amount, tax_due, total_deductions = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+        taxable_amount, tax_due, total_deductions = calculate_estate_tax(
+            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
+        )
     except Exception as e:
         st.error(f"計算錯誤：{e}")
         return
@@ -236,7 +239,11 @@ def main():
         st.markdown("**扣除項目**")
         df_deductions = pd.DataFrame({
             "項目": ["免稅額", "喪葬費扣除額", "配偶扣除額", "直系血親卑親屬扣除額", "父母扣除額", "重度身心障礙扣除額", "其他撫養扣除額"],
-            "金額（萬）": [EXEMPT_AMOUNT, FUNERAL_EXPENSE, spouse_deduction, adult_children * ADULT_CHILD_DEDUCTION, parents * PARENTS_DEDUCTION, disabled_people * DISABLED_DEDUCTION, other_dependents * OTHER_DEPENDENTS_DEDUCTION]
+            "金額（萬）": [
+                EXEMPT_AMOUNT, FUNERAL_EXPENSE, spouse_deduction,
+                adult_children * ADULT_CHILD_DEDUCTION, parents * PARENTS_DEDUCTION,
+                disabled_people * DISABLED_DEDUCTION, other_dependents * OTHER_DEPENDENTS_DEDUCTION
+            ]
         })
         st.table(df_deductions)
     with col3:
