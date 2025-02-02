@@ -34,7 +34,7 @@ def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_d
         (parents * PARENTS_DEDUCTION)
     )
     if total_assets < EXEMPT_AMOUNT + deductions:
-        raise ValueError("扣除額總和超過了總資產，請檢查輸入數值！")
+        raise ValueError("扣除額總和超過了總遺產，請檢查輸入數值！")
     
     taxable_amount = int(max(0, total_assets - EXEMPT_AMOUNT - deductions))
     tax_due = 0
@@ -202,10 +202,10 @@ def main():
     
     st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
     
-    # 將輸入區從側邊欄移至主畫面上方
+    # 輸入區移至主畫面上方
     with st.container():
         st.markdown("### 請輸入資產及家庭資訊", unsafe_allow_html=True)
-        total_assets = st.number_input("資產總額（萬）", min_value=1000, max_value=100000, value=5000, step=100, help="請輸入您的總資產金額（單位：萬）")
+        total_assets = st.number_input("遺產總額（萬）", min_value=1000, max_value=100000, value=5000, step=100, help="請輸入您的總遺產金額（單位：萬）")
         st.markdown("---")
         st.markdown("#### 請輸入家庭成員數")
         has_spouse = st.checkbox("是否有配偶（扣除額 553 萬）", value=False)
@@ -217,9 +217,7 @@ def main():
         other_dependents = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0, help="請輸入兄弟姊妹或祖父母人數")
     
     try:
-        taxable_amount, tax_due, total_deductions = calculate_estate_tax(
-            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
-        )
+        taxable_amount, tax_due, total_deductions = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     except Exception as e:
         st.error(f"計算錯誤：{e}")
         return
@@ -230,7 +228,7 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("**資產概況**")
-        df_assets = pd.DataFrame({"項目": ["資產總額"], "金額（萬）": [total_assets]})
+        df_assets = pd.DataFrame({"項目": ["遺產總額"], "金額（萬）": [total_assets]})
         st.table(df_assets)
     with col2:
         st.markdown("**扣除項目**")
@@ -246,7 +244,7 @@ def main():
     with col3:
         st.markdown("**稅務計算**")
         df_tax = pd.DataFrame({
-            "項目": ["課稅資產淨額", "預估遺產稅"],
+            "項目": ["課稅遺產淨額", "預估遺產稅"],
             "金額（萬）": [taxable_amount, tax_due]
         })
         st.table(df_tax.round(2))
@@ -265,7 +263,7 @@ def main():
         insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("**【原始情況】**")
         original = insurance_results["原始情況"]
-        st.markdown(f"- 資產總額：**{original['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"- 遺產總額：**{original['遺產總額']:,.2f} 萬元**")
         st.markdown(f"- 預估稅額：**{original['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共收到：**{original['家人總共收到']:,.2f} 萬元**")
         st.markdown("**【有規劃保單（未被實質課稅）】**")
@@ -291,13 +289,13 @@ def main():
         gift_results = simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years)
         st.markdown("**【原始情況】**")
         original_gift = gift_results["原始情況"]
-        st.markdown(f"- 資產總額：**{original_gift['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"- 遺產總額：**{original_gift['遺產總額']:,.2f} 萬元**")
         st.markdown(f"- 預估稅額：**{original_gift['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共收到：**{original_gift['家人總共收到']:,.2f} 萬元**")
         st.markdown("**【提前贈與後】**")
         after_gift = gift_results["提前贈與後"]
         st.markdown(f"- 贈與年數：**{after_gift['贈與年數']} 年**")
-        st.markdown(f"- 資產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"- 遺產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
         st.markdown(f"- 預估稅額：**{after_gift['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 總贈與金額：**{after_gift['總贈與金額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共收到：**{after_gift['家人總共收到']:,.2f} 萬元**")
@@ -316,11 +314,11 @@ def main():
         effect_div = div_results["規劃效果"]
         st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {effect_div['較原始情況增加']:,.2f} 萬元</span>", unsafe_allow_html=True)
     
-    # 行銷導引區塊：引導用戶前往官網
+    # 行銷導引區塊：引導用戶前往永傳家族辦公室官網
     st.markdown("---")
     st.markdown("### 想了解更多？")
     st.markdown("歡迎前往 **永傳家族辦公室**，我們提供專業的家族傳承與財富規劃服務。")
     st.markdown("[點此前往官網](https://www.gracefo.com)", unsafe_allow_html=True)
-    
+
 if __name__ == "__main__":
     main()
