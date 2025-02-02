@@ -18,7 +18,7 @@ TAX_BRACKETS = [
     (float('inf'), 0.2)
 ]
 
-# === 核心計算邏輯，並使用 st.cache_data 以提升效能 ===
+# === 核心計算邏輯，並使用 st.cache_data 提升效能 ===
 @st.cache_data
 def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
@@ -35,7 +35,7 @@ def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_d
         (parents * PARENTS_DEDUCTION)
     )
 
-    # 若扣除額總和超過 (免稅額 + 扣除額) ，則表示輸入資料可能有誤
+    # 檢查輸入合理性
     if total_assets < EXEMPT_AMOUNT + deductions:
         raise ValueError("扣除額總和超過了總遺產，請檢查輸入數值！")
     
@@ -52,20 +52,65 @@ def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_d
             previous_bracket = bracket
     return taxable_amount, round(tax_due, 2), deductions
 
-def generate_advice(taxable_amount, tax_due):
+def generate_basic_advice(taxable_amount, tax_due):
     """
-    根據計算結果生成簡單的 AI 規劃建議文字
+    根據計算結果生成基本的 AI 規劃建議文字
     """
     return (
-        "根據您的情況，建議您考慮以下策略來降低遺產稅負擔：\n"
+        "根據您的計算結果，建議您考慮以下策略來降低遺產稅負擔：\n"
         "1. 規劃保單，預留遺產稅資金\n"
         "2. 提前贈與，逐步轉移財富\n"
         "3. 分散資產配置，降低稅務影響"
     )
 
+def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, reduction_rate=0.1):
+    """
+    模擬提前贈與策略：
+    假設透過提前贈與將總遺產降低一定比例 (預設 10%)，計算新的遺產稅情況
+    """
+    simulated_total_assets = total_assets * (1 - reduction_rate)
+    try:
+        taxable_sim, tax_due_sim, _ = calculate_estate_tax(
+            simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
+        )
+    except Exception as e:
+        # 若發生錯誤，返回 None
+        return None, None, simulated_total_assets
+    return taxable_sim, tax_due_sim, simulated_total_assets
+
+def inject_custom_css():
+    """
+    注入自訂 CSS 以美化介面
+    """
+    custom_css = """
+    <style>
+    /* 調整整體背景與字型 */
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f8f9fa;
+    }
+    /* 標題美化 */
+    .main-header {
+        color: #2c3e50;
+        text-align: center;
+    }
+    /* 資料區塊卡片化 */
+    .data-card {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    </style>
+    """
+    st.markdown(custom_css, unsafe_allow_html=True)
+
 def main():
+    # 設定頁面與注入 CSS
     st.set_page_config(page_title="遺產稅試算工具", layout="wide")
-    st.header("遺產稅試算工具")
+    inject_custom_css()
+    st.markdown("<h1 class='main-header'>遺產稅試算工具</h1>", unsafe_allow_html=True)
     
     # 地區選擇（目前僅提供台灣 2025 年起的版本）
     st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
@@ -114,7 +159,7 @@ def main():
         help="請輸入兄弟姊妹或祖父母人數"
     )
     
-    # 進行計算（錯誤處理）
+    # 主計算流程（含錯誤處理）
     try:
         taxable_amount, tax_due, total_deductions = calculate_estate_tax(
             total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
@@ -123,7 +168,8 @@ def main():
         st.error(f"計算錯誤：{e}")
         return
 
-    # 展示結果
+    # 結果展示區：採用卡片式區塊
+    st.markdown("<div class='data-card'>", unsafe_allow_html=True)
     st.subheader(f"預估遺產稅：{tax_due:,.2f} 萬元")
     
     col1, col2, col3 = st.columns(3)
@@ -166,10 +212,27 @@ def main():
             "金額（萬）": [taxable_amount, tax_due]
         })
         st.table(df_tax)
+    st.markdown("</div>", unsafe_allow_html=True)
     
-    # 顯示 AI 規劃建議
-    st.markdown("## AI 規劃建議")
-    st.text(generate_advice(taxable_amount, tax_due))
+    # 基本的 AI 規劃建議
+    st.markdown("## 家族傳承策略建議")
+    st.text(generate_basic_advice(taxable_amount, tax_due))
+    
+    # --- 模擬情境：提前贈與策略 ---
+    with st.expander("情境模擬：假設提前贈與降低10%的遺產金額"):
+        sim_taxable, sim_tax_due, sim_total_assets = simulate_gift_strategy(
+            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, reduction_rate=0.10
+        )
+        if sim_taxable is None:
+            st.error("模擬計算發生錯誤，請檢查輸入數值。")
+        else:
+            st.markdown(f"原始總遺產：**{total_assets:,.2f} 萬元**")
+            st.markdown(f"模擬後總遺產（提前贈與10%）：**{sim_total_assets:,.2f} 萬元**")
+            st.markdown(f"原始預估稅額：**{tax_due:,.2f} 萬元**")
+            st.markdown(f"模擬預估稅額：**{sim_tax_due:,.2f} 萬元**")
+            saved = tax_due - sim_tax_due
+            percent_saved = (saved / tax_due) * 100 if tax_due else 0
+            st.markdown(f"節省稅額：**{saved:,.2f} 萬元**，約節省 **{percent_saved:.1f}%**")
     
 if __name__ == "__main__":
     main()
