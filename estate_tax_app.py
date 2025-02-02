@@ -259,7 +259,7 @@ def main():
     # 保單規劃策略模擬
     with tabs[0]:
         st.markdown("#### 保單規劃策略說明", unsafe_allow_html=True)
-        st.markdown("<span class='explanation'>保單策略：保險理賠金和保費依公式計算；未被實質課稅時，理賠金不參與課稅；【被實質課稅】則保險理賠金納入遺產稅計算。</span>", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>保單規劃策略：保險理賠金和保費依公式計算；未被實質課稅時，理賠金不參與課稅；【被實質課稅】則保險理賠金納入遺產稅計算。</span>", unsafe_allow_html=True)
         insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("**【原始情況】**")
         original = insurance_results["原始情況"]
