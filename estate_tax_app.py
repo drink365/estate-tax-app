@@ -61,13 +61,9 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     - 假設保費 = 假設保險理賠金 ÷ 1.5
     【原始情況】：
       - 遺產總額、預估稅額、家人總共收到 = 遺產總額 - 預估稅額
-    【有規劃保單（未被實質課稅）】：
-      - 預估稅額 = 稅額(遺產總額 - 假設保費)
-      - 家人總共收到 = (遺產總額 - 假設保費 - 預估稅額) + 假設保險理賠金
-    【有規劃保單（被實質課稅）】：
-      - 有效遺產 = 遺產總額 - 假設保費 + 假設保險理賠金
-      - 預估稅額 = 稅額(有效遺產)
-      - 家人總共收到 = 有效遺產 - 預估稅額
+    【有規劃保單】：
+      - (未被實質課稅) 預估稅額 = 稅額(遺產總額 - 假設保費)，家人總共收到 = (遺產總額 - 假設保費 - 預估稅額) + 假設保險理賠金
+      - (被實質課稅) 有效遺產 = 遺產總額 - 假設保費 + 假設保險理賠金，家人總共收到 = 有效遺產 - 預估稅額
     """
     # 原始情況
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
@@ -251,27 +247,25 @@ def main():
     st.markdown("## 家族傳承策略建議")
     st.text(generate_basic_advice(taxable_amount, tax_due))
     
-    st.markdown("### 模擬情境")
+    # 使用 Tabs 統一呈現三種模擬策略
+    tabs = st.tabs(["保單規劃策略", "提前贈與策略", "分散資產配置策略"])
     
-    # 模擬1：保單規劃策略
-    with st.expander("1. 規劃保單策略"):
-        insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    # 保單規劃策略模擬
+    with tabs[0]:
         st.markdown("#### 保單規劃策略說明")
-        st.markdown("<span class='explanation'>假設保險理賠金和保費分別依照公式計算；未被實質課稅時，理賠金不參與課稅；被實質課稅時，理賠金納入有效遺產計算。</span>", unsafe_allow_html=True)
-        
+        st.markdown("<span class='explanation'>保單策略說明：利用保險降低課稅基數。<br>【未被實質課稅】：保險理賠金不計入課稅；【被實質課稅】：保險理賠金納入有效遺產計算。</span>", unsafe_allow_html=True)
+        insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("**【原始情況】**")
         original = insurance_results["原始情況"]
         st.markdown(f"- 遺產總額：**{original['遺產總額']:,.2f} 萬元**")
         st.markdown(f"- 預估稅額：**{original['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共收到：**{original['家人總共收到']:,.2f} 萬元**")
-        
         st.markdown("**【有規劃保單（未被實質課稅）】**")
         not_taxed = insurance_results["有規劃保單 (未被實質課稅)"]
         st.markdown(f"- 假設保費：**{not_taxed['假設保費']:,.2f} 萬**，理賠金：**{not_taxed['假設保險理賠金']:,.2f} 萬**")
         st.markdown(f"- 預估稅額：**{not_taxed['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共收到：**{not_taxed['家人總共收到']:,.2f} 萬元**")
         st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {not_taxed['規劃效果']:,.2f} 萬元</span>", unsafe_allow_html=True)
-        
         st.markdown("**【有規劃保單（被實質課稅）】**")
         taxed = insurance_results["有規劃保單 (被實質課稅)"]
         effective_estate = total_assets - taxed["假設保費"] + taxed["假設保險理賠金"]
@@ -281,35 +275,31 @@ def main():
         st.markdown(f"- 家人總共收到：**{taxed['家人總共收到']:,.2f} 萬元**")
         st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {taxed['規劃效果']:,.2f} 萬元</span>", unsafe_allow_html=True)
     
-    # 模擬2：提前贈與策略
-    with st.expander("2. 提前贈與策略"):
-        years = st.slider("設定提前贈與年數", min_value=1, max_value=10, value=3, step=1)
-        gift_results = simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years)
-        if gift_results is None:
-            st.error("模擬計算發生錯誤，請檢查輸入數值。")
-        else:
-            st.markdown("#### 提前贈與策略說明")
-            st.markdown("<span class='explanation'>假設每年可贈與244萬免稅額度，總贈與金額 = 年數 × 244萬；家人收到的金額包含全部贈與金額。</span>", unsafe_allow_html=True)
-            st.markdown("**【原始情況】**")
-            original_gift = gift_results["原始情況"]
-            st.markdown(f"- 遺產總額：**{original_gift['遺產總額']:,.2f} 萬元**")
-            st.markdown(f"- 預估稅額：**{original_gift['預估稅額']:,.2f} 萬元**")
-            st.markdown(f"- 家人總共收到：**{original_gift['家人總共收到']:,.2f} 萬元**")
-            st.markdown("**【提前贈與後】**")
-            after_gift = gift_results["提前贈與後"]
-            st.markdown(f"- 贈與年數：**{after_gift['贈與年數']} 年**")
-            st.markdown(f"- 遺產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
-            st.markdown(f"- 預估稅額：**{after_gift['預估稅額']:,.2f} 萬元**")
-            st.markdown(f"- 總贈與金額：**{after_gift['總贈與金額']:,.2f} 萬元**")
-            st.markdown(f"- 家人總共收到：**{after_gift['家人總共收到']:,.2f} 萬元**")
-            effect_gift = gift_results["規劃效果"]
-            st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {effect_gift['較原始情況增加']:,.2f} 萬元</span>", unsafe_allow_html=True)
+    # 提前贈與策略模擬
+    with tabs[1]:
+        st.markdown("#### 提前贈與策略說明")
+        st.markdown("<span class='explanation'>提前贈與說明：每年贈與244萬免稅額度，總贈與金額 = 年數 × 244萬；家人收到的金額包含全部贈與金額。</span>", unsafe_allow_html=True)
+        gift_results = simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, st.slider("設定提前贈與年數", 1, 10, 3, 1))
+        st.markdown("**【原始情況】**")
+        original_gift = gift_results["原始情況"]
+        st.markdown(f"- 遺產總額：**{original_gift['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"- 預估稅額：**{original_gift['預估稅額']:,.2f} 萬元**")
+        st.markdown(f"- 家人總共收到：**{original_gift['家人總共收到']:,.2f} 萬元**")
+        st.markdown("**【提前贈與後】**")
+        after_gift = gift_results["提前贈與後"]
+        st.markdown(f"- 贈與年數：**{after_gift['贈與年數']} 年**")
+        st.markdown(f"- 遺產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
+        st.markdown(f"- 預估稅額：**{after_gift['預估稅額']:,.2f} 萬元**")
+        st.markdown(f"- 總贈與金額：**{after_gift['總贈與金額']:,.2f} 萬元**")
+        st.markdown(f"- 家人總共收到：**{after_gift['家人總共收到']:,.2f} 萬元**")
+        effect_gift = gift_results["規劃效果"]
+        st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {effect_gift['較原始情況增加']:,.2f} 萬元</span>", unsafe_allow_html=True)
     
-    # 模擬3：分散資產配置策略
-    with st.expander("3. 分散資產配置策略"):
-        div_results = simulate_diversified_strategy(tax_due)
+    # 分散資產配置策略模擬
+    with tabs[2]:
         st.markdown("#### 分散資產配置策略說明")
-        st.markdown("<span class='explanation'>假設透過分散資產配置，可使稅率下降10%，稅額降至約90%。</span>", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>分散配置說明：假設分散配置可使稅率下降10%，稅額降至約90%。</span>", unsafe_allow_html=True)
+        div_results = simulate_diversified_strategy(tax_due)
         st.markdown("**【原始情況】**")
         st.markdown(f"- 預估稅額：**{div_results['原始情況']['預估稅額']:,.2f} 萬元**")
         st.markdown("**【分散資產配置後】**")
