@@ -57,12 +57,11 @@ def generate_basic_advice(taxable_amount, tax_due):
 def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
     模擬保單策略：
-    - 假設保險理賠金：向上取整至最近10萬（例如297→300）
+    - 假設保險理賠金：向上取整至最近100萬（例如：297萬→300萬）
     - 假設保費 = 假設保險理賠金 ÷ 1.5
     【原始情況】：
       - 遺產總額、預估稅額、家人總共收到 = 遺產總額 - 預估稅額
     【有規劃保單（未被實質課稅）】：
-      - 假設保費、假設保險理賠金
       - 預估稅額 = 稅額(遺產總額 - 假設保費)
       - 家人總共收到 = (遺產總額 - 假設保費 - 預估稅額) + 假設保險理賠金
     【有規劃保單（被實質課稅）】：
@@ -74,8 +73,8 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_no_insurance = total_assets - tax_no_insurance
 
-    # 假設保險方案
-    assumed_payout = round(math.ceil(tax_no_insurance / 10) * 10, 2)
+    # 假設保險方案：向上取整至最近100萬
+    assumed_payout = round(math.ceil(tax_no_insurance / 100) * 100, 2)
     assumed_premium = round(assumed_payout / 1.5, 2)
 
     # 模擬未被實質課稅
@@ -158,14 +157,13 @@ def simulate_diversified_strategy(tax_due):
     simulated_tax_due = round(tax_due * 0.9, 2)
     saved = round(tax_due - simulated_tax_due, 2)
     percent_saved = round((saved / tax_due) * 100, 2) if tax_due else 0
-    explanation = f"假設透過分散資產配置，可以使稅率降低10%，因此稅額由原本的{tax_due:,.2f}萬降低至{simulated_tax_due:,.2f}萬。"
+    # 統一將說明放在區塊最上方，這裡取消原本規劃效果下方的說明
     return {
         "原始情況": {
             "預估稅額": tax_due
         },
         "分散資產配置後": {
-            "預估稅額": simulated_tax_due,
-            "說明": explanation
+            "預估稅額": simulated_tax_due
         },
         "規劃效果": {
             "較原始情況增加": saved,
@@ -260,7 +258,7 @@ def main():
     with st.expander("1. 規劃保單策略"):
         insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("#### 保單規劃策略說明")
-        st.markdown("<span class='explanation'>假設保險理賠金向上取整至最近10萬，假設保費 = 保險理賠金 ÷ 1.5；未被實質課稅時，保險理賠金不參與課稅；被實質課稅時，保險理賠金納入有效遺產計算。</span>", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>假設保險理賠金向上取整至最近100萬，假設保費 = 保險理賠金 ÷ 1.5；未被實質課稅時，保險理賠金不參與課稅；被實質課稅時，保險理賠金納入有效遺產計算。</span>", unsafe_allow_html=True)
         
         st.markdown("**【原始情況】**")
         original = insurance_results["原始情況"]
@@ -319,7 +317,6 @@ def main():
         st.markdown(f"- 預估稅額：**{div_results['分散資產配置後']['預估稅額']:,.2f} 萬元**")
         effect_div = div_results["規劃效果"]
         st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {effect_div['較原始情況增加']:,.2f} 萬元</span>", unsafe_allow_html=True)
-        st.markdown(f"- <span class='explanation'>{div_results['分散資產配置後']['說明']}</span>", unsafe_allow_html=True)
     
 if __name__ == "__main__":
     main()
