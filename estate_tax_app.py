@@ -68,31 +68,34 @@ def generate_basic_advice(taxable_amount, tax_due):
 def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
     模擬保單規劃策略：
-    假設購買保險：保費 200 萬、理賠金 300 萬。
+    根據原始遺產稅動態計算推薦的保險理賠金及保費：
+      - 推薦理賠金 = ceil(原始稅額/10) * 10（例如297 →300、4740.5 →4750）
+      - 推薦保費 = 推薦理賠金 / 1.5
     分別顯示：
-    - 【原始情況】：未規劃保險時的遺產總額、預估稅額及家人最終可得。
-    - 【有規劃保單（未被實質課稅）】：扣除 200 萬保費後重新計算稅額，家人最終可得 = (遺產總額-200萬 - 新稅額) + 300萬。
-    - 【有規劃保單（被實質課稅）】：模擬效果假設家人最終可額外增加 100 萬。
+      - 【原始情況】：未規劃保險時的遺產總額、預估稅額及家人最終可得。
+      - 【有規劃保單（未被實質課稅）】：扣除推薦保費後重新計算稅額，再加上推薦理賠金。
+      - 【有規劃保單（被實質課稅）】：模擬效果假設家人最終可額外增加 (推薦理賠金 - 推薦保費) 的一半。
     並計算各情境相對於原始情況的規劃效果。
     """
-    premium = 200
-    benefit = 300
-
-    # 原始情況
+    # 取得原始稅額
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_no_insurance = total_assets - tax_no_insurance
 
-    # 模擬有規劃保單（未被實質課稅）
-    new_total_assets = total_assets - premium
+    # 推薦保險金額動態計算：推薦理賠金 = 向上取整至最近10萬
+    recommended_payout = math.ceil(tax_no_insurance / 10) * 10
+    recommended_premium = recommended_payout / 1.5
+
+    # 模擬有規劃保單（未被實質課稅）：
+    new_total_assets = total_assets - recommended_premium
     try:
         _, tax_with_insurance, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     except Exception as e:
         tax_with_insurance = 0
-    net_insurance_not_taxed = (new_total_assets - tax_with_insurance) + benefit
+    net_insurance_not_taxed = (new_total_assets - tax_with_insurance) + recommended_payout
     effect_not_taxed = net_insurance_not_taxed - net_no_insurance
 
-    # 模擬有規劃保單（被實質課稅）
-    net_insurance_taxed = net_no_insurance + 100  # 假設效果：額外增加 100 萬
+    # 模擬有規劃保單（被實質課稅）：假設效果為原始情況上增加 (recommended_payout - recommended_premium) 的50%
+    net_insurance_taxed = net_no_insurance + (recommended_payout - recommended_premium) * 0.5
     effect_taxed = net_insurance_taxed - net_no_insurance
 
     return {
@@ -102,6 +105,8 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
             "家人最終可得": net_no_insurance
         },
         "有規劃保單 (未被實質課稅)": {
+            "推薦保險理賠金": recommended_payout,
+            "推薦保費": recommended_premium,
             "扣除保費後遺產": new_total_assets,
             "預估稅額": tax_with_insurance,
             "家人最終可得": net_insurance_not_taxed,
@@ -110,7 +115,7 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
         "有規劃保單 (被實質課稅)": {
             "家人最終可得": net_insurance_taxed,
             "規劃效果": effect_taxed,
-            "說明": "模擬效果假設家人最終可額外增加 100 萬"
+            "說明": "模擬效果假設家人最終可增加 (推薦理賠金 - 推薦保費) 的50%"
         }
     }
 
@@ -334,6 +339,8 @@ def main():
         st.markdown(f"家人最終可得：**{original['家人最終可得']:,.2f} 萬元**")
         st.markdown("【有規劃保單（未被實質課稅）】")
         not_taxed = insurance_results["有規劃保單 (未被實質課稅)"]
+        st.markdown(f"推薦保險理賠金：**{not_taxed['推薦保險理賠金']:,.2f} 萬元**")
+        st.markdown(f"推薦保費：**{not_taxed['推薦保費']:,.2f} 萬元**")
         st.markdown(f"扣除保費後遺產：**{not_taxed['扣除保費後遺產']:,.2f} 萬元**")
         st.markdown(f"預估稅額：**{not_taxed['預估稅額']:,.2f} 萬元**")
         st.markdown(f"家人最終可得：**{not_taxed['家人最終可得']:,.2f} 萬元**")
@@ -368,9 +375,8 @@ def main():
     # 模擬 3：分散資產配置策略
     with st.expander("3. 分散資產配置策略"):
         div_results = simulate_diversified_strategy(tax_due)
-        # 因 simulate_diversified_strategy 回傳字典，所以直接顯示
         st.markdown("【原始情況】")
-        st.markdown(f"預估稅額：**{tax_due:,.2f} 萬元**")
+        st.markdown(f"預估稅額：**{div_results['原始情況']['預估稅額']:,.2f} 萬元**")
         st.markdown("【分散資產配置後】")
         st.markdown(f"預估稅額：**{div_results['分散資產配置後']['預估稅額']:,.2f} 萬元**")
         effect_div = div_results["規劃效果"]
