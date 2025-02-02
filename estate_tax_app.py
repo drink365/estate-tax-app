@@ -11,31 +11,31 @@ PARENTS_DEDUCTION = 138       # 父母扣除額（萬）
 DISABLED_DEDUCTION = 693      # 重度以上身心障礙扣除額（萬）
 OTHER_DEPENDENTS_DEDUCTION = 56  # 其他撫養扣除額（萬）
 
-# 台灣 2025 年累進稅率結構 (上限, 稅率)
+# 模擬中以20%單一稅率作為示例，您原先的稅率結構保持不變
 TAX_BRACKETS = [
     (5621, 0.1),
     (11242, 0.15),
     (float('inf'), 0.2)
 ]
 
-# === 核心計算邏輯 ===
+# === 核心計算邏輯，使用 st.cache_data 提升效能 ===
 @st.cache_data
 def calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents):
     """
-    計算遺產稅，若扣除額總和超過總遺產則拋出錯誤。
+    計算遺產稅，若扣除額總和超過總遺產，則拋出錯誤。
     回傳值：(課稅遺產淨額, 預估遺產稅, 總扣除額)
     """
-    deductions = (spouse_deduction + FUNERAL_EXPENSE +
-                  (disabled_people * DISABLED_DEDUCTION) +
-                  (adult_children * ADULT_CHILD_DEDUCTION) +
-                  (other_dependents * OTHER_DEPENDENTS_DEDUCTION) +
-                  (parents * PARENTS_DEDUCTION))
-    
+    deductions = (
+        spouse_deduction +
+        FUNERAL_EXPENSE +
+        (disabled_people * DISABLED_DEDUCTION) +
+        (adult_children * ADULT_CHILD_DEDUCTION) +
+        (other_dependents * OTHER_DEPENDENTS_DEDUCTION) +
+        (parents * PARENTS_DEDUCTION)
+    )
     if total_assets < EXEMPT_AMOUNT + deductions:
         raise ValueError("扣除額總和超過了總遺產，請檢查輸入數值！")
-    
     taxable_amount = int(max(0, total_assets - EXEMPT_AMOUNT - deductions))
-    
     tax_due = 0
     previous_bracket = 0
     for bracket, rate in TAX_BRACKETS:
@@ -58,26 +58,35 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     模擬保單規劃策略：
     - 假設保險理賠金 = 向上取整至最近 10 萬（例如 297 萬變成 300 萬）
     - 假設保費 = 假設保險理賠金 / 1.5
-    【原始情況】：家人總共可得 = 遺產總額 - 原稅額
-    【有規劃保單（未被實質課稅）】：家人總共可得 = (遺產總額 - 假設保費) + 假設保險理賠金
-    【有規劃保單（被實質課稅）】：家人總共可得 = (遺產總額 - 假設保費 + 假設保險理賠金) - 新稅額
+    模擬兩種情境：
+      1. 【有規劃保單（未被實質課稅）】：
+         扣除假設保費後遺產 = 總遺產 - 假設保費  
+         預估稅額 = 稅額(扣除假設保費後遺產)  
+         家人總共可得 = (扣除假設保費後遺產 - 預估稅額) + 假設保險理賠金
+      2. 【有規劃保單（被實質課稅）】：
+         假設新遺產 = (總遺產 - 假設保費 + 假設保險理賠金)
+         預估稅額 = 稅額(新遺產)
+         家人總共可得 = 新遺產 - 預估稅額
+    並計算規劃效果（較原始情況增加的金額）。
     """
     # 原始情況
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_no_insurance = total_assets - tax_no_insurance
 
-    # 假設保險方案
+    # 假設方案
     assumed_payout = round(math.ceil(tax_no_insurance / 10) * 10, 2)
     assumed_premium = round(assumed_payout / 1.5, 2)
 
-    # 未被實質課稅：稅額不變，家人總共可得 = (總遺產 - 假設保費) + 假設保險理賠金
-    net_not_taxed = round((total_assets - assumed_premium) + assumed_payout, 2)
+    # 未被實質課稅：稅額基數不包含理賠金
+    new_total_assets = total_assets - assumed_premium
+    _, tax_not_taxed, _ = calculate_estate_tax(new_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    net_not_taxed = round((new_total_assets - tax_not_taxed) + assumed_payout, 2)
     effect_not_taxed = round(net_not_taxed - net_no_insurance, 2)
 
-    # 被實質課稅：稅額依據 (總遺產 - 假設保費 + 假設保險理賠金) 重新計算
-    new_taxable_total = total_assets - assumed_premium + assumed_payout
-    _, tax_with_insurance, _ = calculate_estate_tax(new_taxable_total, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
-    net_taxed = round(new_taxable_total - tax_with_insurance, 2)
+    # 被實質課稅：稅額基數包含理賠金
+    taxable_with_benefit = total_assets - assumed_premium + assumed_payout
+    _, tax_taxed, _ = calculate_estate_tax(taxable_with_benefit, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
+    net_taxed = round(taxable_with_benefit - tax_taxed, 2)
     effect_taxed = round(net_taxed - net_no_insurance, 2)
 
     return {
@@ -89,6 +98,8 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
         "有規劃保單 (未被實質課稅)": {
             "假設保費": assumed_premium,
             "假設保險理賠金": assumed_payout,
+            "扣除保費後遺產": new_total_assets,
+            "預估稅額": tax_not_taxed,
             "家人總共可得": net_not_taxed,
             "規劃效果": effect_not_taxed
         },
@@ -104,7 +115,10 @@ def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other
     """
     模擬提前贈與策略：
     假設每年可贈與 244 萬免稅額度，
-    規劃後家人總共可得 = (原始遺產總額 - 總贈與金額 - 新稅額) + 總贈與金額
+    總贈與金額 = years * 244 萬，
+    規劃後遺產 = 原始遺產總額 - 總贈與金額，
+    重新計算稅額後，家人總共可得 = (規劃後遺產 - 預估稅額) + 總贈與金額。
+    並與原始情況比較，計算規劃效果。
     """
     annual_gift_exemption = 244
     total_gift = years * annual_gift_exemption
@@ -133,6 +147,11 @@ def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other
     }
 
 def simulate_diversified_strategy(tax_due):
+    """
+    模擬分散資產配置策略：
+    假設可降低 10% 稅額，即最終稅額 = 原稅額的 90%，
+    並計算規劃效果及節省百分比。
+    """
     simulated_tax_due = round(tax_due * 0.9, 2)
     saved_div = round(tax_due - simulated_tax_due, 2)
     percent_saved_div = round((saved_div / tax_due) * 100, 2) if tax_due else 0
@@ -197,7 +216,7 @@ def main():
         return
 
     st.markdown("<div class='data-card'>", unsafe_allow_html=True)
-    st.subheader(f"預估遺產稅：{round(tax_due,2):,.2f} 萬元")
+    st.subheader(f"預估遺產稅：{tax_due:,.2f} 萬元")
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -239,12 +258,15 @@ def main():
         st.markdown("**【有規劃保單（未被實質課稅）】**")
         not_taxed = insurance_results["有規劃保單 (未被實質課稅)"]
         st.markdown(f"- 假設保費：**{not_taxed['假設保費']:,.2f} 萬**，理賠金：**{not_taxed['假設保險理賠金']:,.2f} 萬**")
+        st.markdown(f"- 扣除保費後遺產：**{not_taxed['扣除保費後遺產']:,.2f} 萬元**")
+        st.markdown(f"- 預估稅額：**{not_taxed['預估稅額']:,.2f} 萬元**")
         st.markdown(f"- 家人總共可得：**{not_taxed['家人總共可得']:,.2f} 萬元**")
         st.markdown(f"- 規劃效果：較原始情況增加 **{not_taxed['規劃效果']:,.2f} 萬元**")
         
         st.markdown("**【有規劃保單（被實質課稅）】**")
         taxed = insurance_results["有規劃保單 (被實質課稅)"]
         st.markdown(f"- 假設保費：**{taxed.get('假設保費', 'N/A'):,.2f} 萬**，理賠金：**{taxed.get('假設保險理賠金', 'N/A'):,.2f} 萬**")
+        st.markdown(f"- 預估稅額：**{tax_due:,.2f} 萬元**")
         st.markdown(f"- 家人總共可得：**{taxed['家人總共可得']:,.2f} 萬元**")
         st.markdown(f"- 規劃效果：較原始情況增加 **{taxed['規劃效果']:,.2f} 萬元**")
     
