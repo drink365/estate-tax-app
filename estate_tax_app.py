@@ -392,7 +392,7 @@ def main():
         st.markdown("**【分散資產配置後】**")
         st.markdown(f"- 預估稅額：**{div_results['分散資產配置後']['預估稅額']:,.2f} 萬元**")
         effect_div = div_results["規劃效果"]
-        st.markdown(f"- 規劃效果：較原始情況增加 **{effect_div['節省稅額']:,.2f} 萬元**")
+        st.markdown(f"- 規劃效果：較原始情況增加 **{effect_div['較原始情況增加']:,.2f} 萬元**")
     
 if __name__ == "__main__":
     main()
