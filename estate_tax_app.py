@@ -61,13 +61,9 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     - 假設保費 = 假設保險理賠金 ÷ 1.5
     【原始情況】：
       - 遺產總額、預估稅額、家人總共收到 = 遺產總額 - 預估稅額
-    【有規劃保單（未被實質課稅）】：
-      - 預估稅額 = 稅額(遺產總額 - 假設保費)
-      - 家人總共收到 = (遺產總額 - 假設保費 - 預估稅額) + 假設保險理賠金
-    【有規劃保單（被實質課稅）】：
-      - 有效遺產 = 遺產總額 - 假設保費 + 假設保險理賠金
-      - 預估稅額 = 稅額(有效遺產)
-      - 家人總共收到 = 有效遺產 - 預估稅額
+    【有規劃保單】：
+      - (未被實質課稅) 預估稅額 = 稅額(遺產總額 - 假設保費)，家人總共收到 = (遺產總額 - 假設保費 - 預估稅額) + 假設保險理賠金
+      - (被實質課稅) 有效遺產 = 遺產總額 - 假設保費 + 假設保險理賠金，家人總共收到 = 有效遺產 - 預估稅額
     """
     # 原始情況
     _, tax_no_insurance, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
@@ -114,7 +110,7 @@ def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other
     """
     模擬提前贈與策略：
     假設每年可贈與244萬免稅額度，
-    總贈與金額 = years * 244萬，
+    總贈與金額 = 年數 * 244萬，
     規劃後遺產 = 遺產總額 - 總贈與金額，
     重新計算稅額後，
     家人總共收到 = (規劃後遺產 - 預估稅額) + 總贈與金額。
@@ -204,7 +200,9 @@ def main():
     inject_custom_css()
     st.markdown("<h1 class='main-header'>遺產稅試算工具</h1>", unsafe_allow_html=True)
     
-    # 輸入區放在主畫面上方
+    st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
+    
+    # 輸入區移至主畫面上方
     with st.container():
         st.markdown("### 請輸入遺產及家庭資訊", unsafe_allow_html=True)
         total_assets = st.number_input("遺產總額（萬）", min_value=1000, max_value=100000, value=5000, step=100, help="請輸入您的總遺產金額（單位：萬）")
@@ -218,11 +216,8 @@ def main():
         disabled_people = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled, value=0, help="請輸入重度以上身心障礙者人數")
         other_dependents = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0, help="請輸入兄弟姊妹或祖父母人數")
     
-    # 計算結果展示
     try:
-        taxable_amount, tax_due, total_deductions = calculate_estate_tax(
-            total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
-        )
+        taxable_amount, tax_due, total_deductions = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     except Exception as e:
         st.error(f"計算錯誤：{e}")
         return
@@ -263,8 +258,8 @@ def main():
     
     # 保單規劃策略模擬
     with tabs[0]:
-        st.markdown("#### 保單規劃策略說明")
-        st.markdown("<span class='explanation'>保單策略說明：保險理賠金和保費依公式計算；未被實質課稅時，理賠金不參與課稅；【被實質課稅】：保險理賠金納入遺產稅計算。</span>", unsafe_allow_html=True)
+        st.markdown("#### 保單規劃策略說明", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>保單策略：保險理賠金和保費依公式計算；未被實質課稅時，理賠金不參與課稅；【被實質課稅】則保險理賠金納入遺產稅計算。</span>", unsafe_allow_html=True)
         insurance_results = simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
         st.markdown("**【原始情況】**")
         original = insurance_results["原始情況"]
@@ -288,8 +283,8 @@ def main():
     
     # 提前贈與策略模擬
     with tabs[1]:
-        st.markdown("#### 提前贈與策略說明")
-        st.markdown("<span class='explanation'>提前贈與策略說明：每年贈與244萬免稅額度，總贈與金額 = 年數 × 244萬；家人收到的金額包含全部贈與金額。</span>", unsafe_allow_html=True)
+        st.markdown("#### 提前贈與策略說明", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>提前贈與策略：每年贈與244萬免稅額度，總贈與金額 = 年數 × 244萬；家人收到的金額包含全部贈與金額。</span>", unsafe_allow_html=True)
         years = st.slider("設定提前贈與年數", 1, 10, 3, 1)
         gift_results = simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents, years)
         st.markdown("**【原始情況】**")
@@ -309,8 +304,8 @@ def main():
     
     # 分散資產配置策略模擬
     with tabs[2]:
-        st.markdown("#### 分散資產配置策略說明")
-        st.markdown("<span class='explanation'>分散配置策略說明：假設分散配置可使稅率下降10%，稅額降至約90%。</span>", unsafe_allow_html=True)
+        st.markdown("#### 分散資產配置策略說明", unsafe_allow_html=True)
+        st.markdown("<span class='explanation'>分散配置策略：假設分散配置可使稅率下降10%，稅額降至約90%。</span>", unsafe_allow_html=True)
         div_results = simulate_diversified_strategy(tax_due)
         st.markdown("**【原始情況】**")
         st.markdown(f"- 預估稅額：**{div_results['原始情況']['預估稅額']:,.2f} 萬元**")
@@ -319,5 +314,11 @@ def main():
         effect_div = div_results["規劃效果"]
         st.markdown(f"- 規劃效果：<span class='effect'>較原始情況增加 {effect_div['較原始情況增加']:,.2f} 萬元</span>", unsafe_allow_html=True)
     
+    # 行銷導引區塊：引導用戶前往永傳家族辦公室官網
+    st.markdown("---")
+    st.markdown("### 想了解更多？")
+    st.markdown("歡迎前往 **永傳家族辦公室**，我們提供專業的家族傳承與財富規劃服務。")
+    st.markdown("[點此前往官網](https://www.gracefo.com)", unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
