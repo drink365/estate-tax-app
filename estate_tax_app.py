@@ -187,7 +187,7 @@ def simulate_diversified_strategy(tax_due):
         },
         "規劃效果": {
             "較原始情況增加": round(saved_div, 2),
-            "節省百分比": round(percent_saved_div, 1)
+            "節省百分比": round(percent_saved_div, 2)
         }
     }
 
