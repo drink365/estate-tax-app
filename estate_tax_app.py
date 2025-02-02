@@ -89,8 +89,8 @@ def simulate_insurance_strategy(total_assets, spouse_deduction, adult_children, 
     net_no_insurance = total_assets - tax_no_insurance
 
     # 根據原始稅額計算假設的保險方案
-    assumed_payout = math.ceil(tax_no_insurance / 10) * 10  # 向上取整至最近10萬
-    assumed_premium = assumed_payout / 1.5
+    assumed_payout = round(math.ceil(tax_no_insurance / 10) * 10, 2)  # 向上取整至最近10萬
+    assumed_premium = round(assumed_payout / 1.5, 2)
 
     # 模擬有規劃保單（未被實質課稅）
     new_total_assets = total_assets - assumed_premium
@@ -139,16 +139,12 @@ def simulate_gift_strategy(total_assets, spouse_deduction, adult_children, other
     total_gift = years * annual_gift_exemption
     simulated_total_assets = max(total_assets - total_gift, 0)
     try:
-        _, tax_due_sim, _ = calculate_estate_tax(
-            simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
-        )
+        _, tax_due_sim, _ = calculate_estate_tax(simulated_total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     except Exception as e:
         return None
     net_after = (simulated_total_assets - tax_due_sim) + total_gift  # 加上提前贈與的金額
     # 原始情況
-    _, tax_due_original, _ = calculate_estate_tax(
-        total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents
-    )
+    _, tax_due_original, _ = calculate_estate_tax(total_assets, spouse_deduction, adult_children, other_dependents, disabled_people, parents)
     net_original = total_assets - tax_due_original
     saved = net_after - net_original
 
@@ -358,7 +354,7 @@ def main():
         # 顯示有規劃保單（被實質課稅）的情況
         st.markdown("**【有規劃保單（被實質課稅）】**")
         taxed = insurance_results["有規劃保單 (被實質課稅)"]
-        st.markdown(f"- 假設保費：**{taxed.get('假設保費', 'N/A')} 萬**，理賠金：**{taxed.get('假設保險理賠金', 'N/A')} 萬**")
+        st.markdown(f"- 假設保費：**{taxed.get('假設保費', 'N/A'):,.2f} 萬**，理賠金：**{taxed.get('假設保險理賠金', 'N/A'):,.2f} 萬**")
         st.markdown(f"- 預估稅額：**{tax_due:,.2f} 萬元**")
         st.markdown(f"- 家人總共可得：**{taxed['家人總共可得']:,.2f} 萬元**")
         st.markdown(f"- 規劃效果：較原始情況增加 **{taxed['規劃效果']:,.2f} 萬元**")
@@ -379,7 +375,7 @@ def main():
             after_gift = gift_results["提前贈與後"]
             st.markdown(f"- 遺產總額：**{after_gift['遺產總額']:,.2f} 萬元**")
             st.markdown(f"- 預估稅額：**{after_gift['預估稅額']:,.2f} 萬元**")
-            st.markdown(f"- 總贈與金額：**{after_gift['總贈與金額']:,.0f} 萬元**")
+            st.markdown(f"- 總贈與金額：**{after_gift['總贈與金額']:,.2f} 萬元**")
             st.markdown(f"- 家人總共可得：**{after_gift['家人總共可得']:,.2f} 萬元**")
             effect_gift = gift_results["規劃效果"]
             st.markdown(f"- 規劃效果：較原始情況增加 **{effect_gift['較原始情況增加']:,.2f} 萬元**")
