@@ -85,8 +85,16 @@ def main():
         spouse_deduction = SPOUSE_DEDUCTION_VALUE if has_spouse else 0
         adult_children = st.number_input("直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10, value=0, help="請輸入直系血親或卑親屬人數")
         parents = st.number_input("父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2, value=0, help="請輸入父母人數")
-        max_disabled = max(1, adult_children + parents + (1 if has_spouse else 0))
-        disabled_people = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled, value=0, help="請輸入重度以上身心障礙者人數")
+        
+        # 調整 "重度以上身心障礙者數" 的最大限制：不得大於 配偶（1 或 0） + 直系血親卑親屬數 + 父母數
+        max_disabled = (1 if has_spouse else 0) + adult_children + parents
+        disabled_people = st.number_input(
+            "重度以上身心障礙者數（每人 693 萬）",
+            min_value=0,
+            max_value=max_disabled,
+            value=0,
+            help="請輸入重度以上身心障礙者人數，數值不得大於配偶、直系血親卑親屬數及父母數之總和"
+        )
         other_dependents = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0, help="請輸入兄弟姊妹或祖父母人數")
     
     try:
