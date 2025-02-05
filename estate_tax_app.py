@@ -9,7 +9,7 @@ import time
 # ===============================
 # 1. 基本設定與常數（單位：萬）
 # ===============================
-st.set_page_config(page_title="遺產稅試算＋建議", layout="wide")
+st.set_page_config(page_title="遺產稅試算", layout="wide")
 
 EXEMPT_AMOUNT = 1333          # 免稅額
 FUNERAL_EXPENSE = 138         # 喪葬費扣除額
