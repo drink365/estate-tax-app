@@ -197,7 +197,7 @@ def simulate_diversified_strategy(tax_due: float) -> Dict[str, Any]:
 # ===============================
 # 非保護區：遺產稅試算與策略建議
 # ===============================
-st.markdown("<h1 class='main-header'>遺產稅試算＋建議</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-header'>遺產稅試算</h1>", unsafe_allow_html=True)
 st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
 
 with st.container():
