@@ -345,10 +345,10 @@ st.markdown("""
 """)
 
 # ===============================
-# 6. 保護區：模擬試算與效益評估（僅限授權使用者）
+# 6. 保護區：規劃模擬試算與效益評估（僅限授權使用者）
 # ===============================
 st.markdown("---")
-st.markdown("## 模擬試算與效益評估 (僅限授權使用者)")
+st.markdown("## 規劃模擬試算與效益評估 (僅限授權使用者)")
 
 login_container = st.empty()
 
@@ -372,7 +372,7 @@ if not st.session_state.get("authenticated", False):
                 st.session_state.authenticated = False
 
 if st.session_state.get("authenticated", False):
-    st.markdown("請檢視下方的模擬試算與效益評估結果")
+    st.markdown("請檢視下方的規劃模擬試算與效益評估結果")
     
     # 案例參數設定
     CASE_TOTAL_ASSETS: float = total_assets_input  
