@@ -178,7 +178,7 @@ def check_credentials(input_username: str, input_password: str) -> (bool, str):
 # 5. Streamlit 介面
 # ===============================
 class EstateTaxUI:
-    """遺產稅試算介面"""
+    """介面"""
 
     def __init__(self, calculator: EstateTaxCalculator, simulator: EstateTaxSimulator):
         self.calculator = calculator
@@ -186,7 +186,7 @@ class EstateTaxUI:
 
     def render_ui(self):
         """渲染 Streamlit 介面"""
-        st.set_page_config(page_title="遺產稅試算＋建議", layout="wide")
+        st.set_page_config(page_title="AI秒算遺產稅", layout="wide")
         # 注入 CSS：針對內容文字加大1號，標題則還原預設並對主標題做特殊設定（2em 且置中）
         st.markdown(
             """
