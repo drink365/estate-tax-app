@@ -492,7 +492,7 @@ class EstateTaxUI:
             dtick = max_value / 10
             fig_bar_case.update_layout(
                 margin=dict(t=150, b=150, l=50, r=50),
-                yaxis_range=[0, max_value + dtick * 5],
+                yaxis_range=[0, max_value + dtick * 4],
                 autosize=True,
                 height=600,
                 font=dict(size=20),
