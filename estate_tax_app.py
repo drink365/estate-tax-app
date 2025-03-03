@@ -112,7 +112,7 @@ class EstateTaxSimulator:
                 "家人總共取得": int(net_not_taxed),
                 "規劃效果": int(effect_not_taxed)
             },
-            "有規劃保單 (被實質課稅)": {
+            "有規劃保單(被實質課稅)": {
                 "預估遺產稅": int(tax_effective),
                 "家人總共取得": int(net_taxed),
                 "規劃效果": int(effect_taxed)
@@ -424,7 +424,7 @@ class EstateTaxUI:
                     "提前贈與",
                     "購買保險",
                     "提前贈與＋購買保險",
-                    "提前贈與＋購買保險（被實質課稅）"
+                    "提前贈與＋購買保險(被實質課稅)"
                 ],
                 "遺產稅（萬）": [
                     int(tax_case_no_plan),
