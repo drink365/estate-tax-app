@@ -497,7 +497,8 @@ class EstateTaxUI:
                 height=600,
                 font=dict(size=20),
                 title_font=dict(size=24),
-                xaxis_title={'text': "規劃策略", 'font': {'size': 40}},  # 將 x 軸標題加大
+                xaxis_title={'text': "規劃策略", 'font': {'size': 20}},  # 將 x 軸標題字型設為 20
+                yaxis_title={'text': "家人總共取得（萬）", 'font': {'size': 20}},  # 將 y 軸標題字型設為 20
                 xaxis=dict(tickfont=dict(size=20)),
                 yaxis=dict(tickfont=dict(size=20))
             )
