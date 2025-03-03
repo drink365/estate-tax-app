@@ -112,7 +112,7 @@ class EstateTaxSimulator:
                 "家人總共取得": int(net_not_taxed),
                 "規劃效果": int(effect_not_taxed)
             },
-            "有規劃保單（被實質課稅）": {
+            "有規劃保單 (被實質課稅)": {
                 "預估遺產稅": int(tax_effective),
                 "家人總共取得": int(net_taxed),
                 "規劃效果": int(effect_taxed)
@@ -488,8 +488,8 @@ class EstateTaxUI:
                 height=600,
                 font=dict(size=20),
                 title_font=dict(size=24),
-                xaxis_title={'text': "規劃策略", 'font': {'size': 20}},
-                yaxis_title={'text': "家人總共取得（萬）", 'font': {'size': 20}},
+                xaxis_title={'text': "規劃策略", 'font': {'size': 20, 'color': 'black'}},
+                yaxis_title={'text': "家人總共取得（萬）", 'font': {'size': 20, 'color': 'black'}},
                 xaxis=dict(tickfont=dict(size=20)),
                 yaxis=dict(tickfont=dict(size=20))
             )
