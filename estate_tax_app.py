@@ -84,18 +84,21 @@ class EstateTaxSimulator:
                                     other_dependents: int, disabled_people: int, parents: int,
                                     premium_ratio: float, premium: float) -> Dict[str, Any]:
         """模擬保險策略"""
-        _, tax_no_insurance, _ = self.calculator.calculate_estate_tax(total_assets, spouse, adult_children,
-                                                                     other_dependents, disabled_people, parents)
+        _, tax_no_insurance, _ = self.calculator.calculate_estate_tax(
+            total_assets, spouse, adult_children, other_dependents, disabled_people, parents
+        )
         net_no_insurance = total_assets - tax_no_insurance
         claim_amount = round(premium * premium_ratio, 0)
         new_total_assets = total_assets - premium
-        _, tax_new, _ = self.calculator.calculate_estate_tax(new_total_assets, spouse, adult_children,
-                                                            other_dependents, disabled_people, parents)
+        _, tax_new, _ = self.calculator.calculate_estate_tax(
+            new_total_assets, spouse, adult_children, other_dependents, disabled_people, parents
+        )
         net_not_taxed = round(new_total_assets - tax_new + claim_amount, 0)
         effect_not_taxed = net_not_taxed - net_no_insurance
         effective_estate = total_assets - premium + claim_amount
-        _, tax_effective, _ = self.calculator.calculate_estate_tax(effective_estate, spouse, adult_children,
-                                                                  other_dependents, disabled_people, parents)
+        _, tax_effective, _ = self.calculator.calculate_estate_tax(
+            effective_estate, spouse, adult_children, other_dependents, disabled_people, parents
+        )
         net_taxed = round(effective_estate - tax_effective, 0)
         effect_taxed = net_taxed - net_no_insurance
         return {
@@ -123,11 +126,13 @@ class EstateTaxSimulator:
         annual_gift_exemption = 244
         total_gift = years * annual_gift_exemption
         simulated_total_assets = max(total_assets - total_gift, 0)
-        _, tax_sim, _ = self.calculator.calculate_estate_tax(simulated_total_assets, spouse, adult_children,
-                                                            other_dependents, disabled_people, parents)
+        _, tax_sim, _ = self.calculator.calculate_estate_tax(
+            simulated_total_assets, spouse, adult_children, other_dependents, disabled_people, parents
+        )
         net_after = round(simulated_total_assets - tax_sim + total_gift, 0)
-        _, tax_original, _ = self.calculator.calculate_estate_tax(total_assets, spouse, adult_children,
-                                                                 other_dependents, disabled_people, parents)
+        _, tax_original, _ = self.calculator.calculate_estate_tax(
+            total_assets, spouse, adult_children, other_dependents, disabled_people, parents
+        )
         net_original = total_assets - tax_original
         effect = net_after - net_original
         return {
@@ -187,7 +192,7 @@ class EstateTaxUI:
     def render_ui(self):
         """渲染 Streamlit 介面"""
         st.set_page_config(page_title="AI秒算遺產稅", layout="wide")
-        # 直接設定字型大小（一般文字: 1.5em，主標題: 2.7em）
+        # 設定字型大小（一般文字: 1.5em，主標題: 2.7em）
         st.markdown(
             """
             <style>
@@ -203,10 +208,10 @@ class EstateTaxUI:
             }
             /* 其他標題顏色設定 */
             h2 {
-                color: #28a745 !important;  /* 深綠色 */
+                color: #28a745 !important;
             }
             h3 {
-                color: #fd7e14 !important;  /* 橘色 */
+                color: #fd7e14 !important;
             }
             /* 響應式設計：小螢幕下調整邊距 */
             @media only screen and (max-width: 768px) {
@@ -220,26 +225,36 @@ class EstateTaxUI:
             unsafe_allow_html=True
         )
 
-        # 主標題
+        # 主標題與下拉選單（下拉選單維持預設字型）
         st.markdown("<h1 class='main-header'>AI秒算遺產稅</h1>", unsafe_allow_html=True)
         st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
 
         with st.container():
             st.markdown("## 請輸入資產及家庭資訊")
-            total_assets_input = st.number_input("總資產（萬）", min_value=1000, max_value=100000,
-                                                 value=5000, step=100, help="請輸入您的總資產（單位：萬）")
+            total_assets_input = st.number_input(
+                "總資產（萬）", min_value=1000, max_value=100000,
+                value=5000, step=100, help="請輸入您的總資產（單位：萬）"
+            )
             st.markdown("---")
             st.markdown("### 請輸入家庭成員數")
             has_spouse = st.checkbox("是否有配偶（扣除額 553 萬）", value=False)
-            adult_children_input = st.number_input("直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10,
-                                                   value=0, help="請輸入直系血親或卑親屬人數")
-            parents_input = st.number_input("父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2,
-                                            value=0, help="請輸入父母人數")
+            adult_children_input = st.number_input(
+                "直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10,
+                value=0, help="請輸入直系血親或卑親屬人數"
+            )
+            parents_input = st.number_input(
+                "父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2,
+                value=0, help="請輸入父母人數"
+            )
             max_disabled = (1 if has_spouse else 0) + adult_children_input + parents_input
-            disabled_people_input = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled,
-                                                    value=0, help="請輸入重度以上身心障礙者人數")
-            other_dependents_input = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5,
-                                                     value=0, help="請輸入兄弟姊妹或祖父母人數")
+            disabled_people_input = st.number_input(
+                "重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=max_disabled,
+                value=0, help="請輸入重度以上身心障礙者人數"
+            )
+            other_dependents_input = st.number_input(
+                "受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5,
+                value=0, help="請輸入兄弟姊妹或祖父母人數"
+            )
 
         try:
             taxable_amount, tax_due, total_deductions = self.calculator.calculate_estate_tax(
@@ -260,7 +275,11 @@ class EstateTaxUI:
         with col2:
             st.markdown("**扣除項目**")
             df_deductions = pd.DataFrame({
-                "項目": ["免稅額", "喪葬費扣除額", "配偶扣除額", "直系血親卑親屬扣除額", "父母扣除額", "重度身心障礙扣除額", "其他撫養扣除額"],
+                "項目": [
+                    "免稅額", "喪葬費扣除額", "配偶扣除額",
+                    "直系血親卑親屬扣除額", "父母扣除額",
+                    "重度身心障礙扣除額", "其他撫養扣除額"
+                ],
                 "金額（萬）": [
                     self.calculator.constants.EXEMPT_AMOUNT,
                     self.calculator.constants.FUNERAL_EXPENSE,
@@ -283,11 +302,13 @@ class EstateTaxUI:
 
         st.markdown("---")
         st.markdown("## 家族傳承策略建議")
-        st.markdown("""
-        1. 規劃保單：透過保險預留稅源。  
-        2. 提前贈與：利用免稅贈與逐年轉移財富。  
-        3. 分散配置：透過合理資產配置降低稅負。
-        """)
+        st.markdown(
+            """
+            1. 規劃保單：透過保險預留稅源。  
+            2. 提前贈與：利用免稅贈與逐年轉移財富。  
+            3. 分散配置：透過合理資產配置降低稅負。
+            """
+        )
 
         # ===============================
         # 保護區：模擬試算與效益評估（僅限授權使用者）
@@ -326,43 +347,46 @@ class EstateTaxUI:
             CASE_DISABLED = disabled_people_input
             CASE_OTHER = other_dependents_input
 
-            # 保費預設：直接等於預估遺產稅，向上取整到十萬位（例如321萬變為330萬），若超過總資產則取總資產
             default_premium = int(math.ceil(tax_due / 10) * 10)
             if default_premium > CASE_TOTAL_ASSETS:
                 default_premium = CASE_TOTAL_ASSETS
             premium_val = default_premium
 
-            # 理賠金預設：保費的 1.5 倍
             default_claim = int(premium_val * 1.5)
 
-            # 贈與金額預設：若剩餘資產 (總資產 - 保費) 大於等於 244 萬，則預設為 244 萬；否則為 0
             remaining = CASE_TOTAL_ASSETS - premium_val
             if remaining >= 244:
                 default_gift = 244
             else:
                 default_gift = 0
 
-            premium_case = st.number_input("購買保險保費（萬）",
-                                           min_value=0,
-                                           max_value=CASE_TOTAL_ASSETS,
-                                           value=premium_val,
-                                           step=100,
-                                           key="premium_case",
-                                           format="%d")
-            claim_case = st.number_input("保險理賠金（萬）",
-                                         min_value=0,
-                                         max_value=100000,
-                                         value=default_claim,
-                                         step=100,
-                                         key="claim_case",
-                                         format="%d")
-            gift_case = st.number_input("提前贈與金額（萬）",
-                                        min_value=0,
-                                        max_value=CASE_TOTAL_ASSETS - premium_case,
-                                        value=min(default_gift, CASE_TOTAL_ASSETS - premium_case),
-                                        step=100,
-                                        key="case_gift",
-                                        format="%d")
+            premium_case = st.number_input(
+                "購買保險保費（萬）",
+                min_value=0,
+                max_value=CASE_TOTAL_ASSETS,
+                value=premium_val,
+                step=100,
+                key="premium_case",
+                format="%d"
+            )
+            claim_case = st.number_input(
+                "保險理賠金（萬）",
+                min_value=0,
+                max_value=100000,
+                value=default_claim,
+                step=100,
+                key="claim_case",
+                format="%d"
+            )
+            gift_case = st.number_input(
+                "提前贈與金額（萬）",
+                min_value=0,
+                max_value=CASE_TOTAL_ASSETS - premium_case,
+                value=min(default_gift, CASE_TOTAL_ASSETS - premium_case),
+                step=100,
+                key="case_gift",
+                format="%d"
+            )
 
             if premium_case > CASE_TOTAL_ASSETS:
                 st.error("錯誤：保費不得高於總資產！")
@@ -370,56 +394,36 @@ class EstateTaxUI:
                 st.error("錯誤：提前贈與金額不得高於【總資產】-【保費】！")
 
             _, tax_case_no_plan, _ = self.calculator.calculate_estate_tax(
-                CASE_TOTAL_ASSETS,
-                CASE_SPOUSE,
-                CASE_ADULT_CHILDREN,
-                CASE_OTHER,
-                CASE_DISABLED,
-                CASE_PARENTS
+                CASE_TOTAL_ASSETS, CASE_SPOUSE, CASE_ADULT_CHILDREN,
+                CASE_OTHER, CASE_DISABLED, CASE_PARENTS
             )
             net_case_no_plan = CASE_TOTAL_ASSETS - tax_case_no_plan
 
             effective_case_gift = CASE_TOTAL_ASSETS - gift_case
             _, tax_case_gift, _ = self.calculator.calculate_estate_tax(
-                effective_case_gift,
-                CASE_SPOUSE,
-                CASE_ADULT_CHILDREN,
-                CASE_OTHER,
-                CASE_DISABLED,
-                CASE_PARENTS
+                effective_case_gift, CASE_SPOUSE, CASE_ADULT_CHILDREN,
+                CASE_OTHER, CASE_DISABLED, CASE_PARENTS
             )
             net_case_gift = effective_case_gift - tax_case_gift + gift_case
 
             effective_case_insurance = CASE_TOTAL_ASSETS - premium_case
             _, tax_case_insurance, _ = self.calculator.calculate_estate_tax(
-                effective_case_insurance,
-                CASE_SPOUSE,
-                CASE_ADULT_CHILDREN,
-                CASE_OTHER,
-                CASE_DISABLED,
-                CASE_PARENTS
+                effective_case_insurance, CASE_SPOUSE, CASE_ADULT_CHILDREN,
+                CASE_OTHER, CASE_DISABLED, CASE_PARENTS
             )
             net_case_insurance = effective_case_insurance - tax_case_insurance + claim_case
 
             effective_case_combo_not_tax = CASE_TOTAL_ASSETS - gift_case - premium_case
             _, tax_case_combo_not_tax, _ = self.calculator.calculate_estate_tax(
-                effective_case_combo_not_tax,
-                CASE_SPOUSE,
-                CASE_ADULT_CHILDREN,
-                CASE_OTHER,
-                CASE_DISABLED,
-                CASE_PARENTS
+                effective_case_combo_not_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN,
+                CASE_OTHER, CASE_DISABLED, CASE_PARENTS
             )
             net_case_combo_not_tax = effective_case_combo_not_tax - tax_case_combo_not_tax + claim_case + gift_case
 
             effective_case_combo_tax = CASE_TOTAL_ASSETS - gift_case - premium_case + claim_case
             _, tax_case_combo_tax, _ = self.calculator.calculate_estate_tax(
-                effective_case_combo_tax,
-                CASE_SPOUSE,
-                CASE_ADULT_CHILDREN,
-                CASE_OTHER,
-                CASE_DISABLED,
-                CASE_PARENTS
+                effective_case_combo_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN,
+                CASE_OTHER, CASE_DISABLED, CASE_PARENTS
             )
             net_case_combo_tax = effective_case_combo_tax - tax_case_combo_tax + gift_case
 
@@ -447,7 +451,9 @@ class EstateTaxUI:
                 ]
             }
             df_case_results = pd.DataFrame(case_data)
-            baseline_value = df_case_results.loc[df_case_results["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
+            baseline_value = df_case_results.loc[
+                df_case_results["規劃策略"] == "沒有規劃", "家人總共取得（萬）"
+            ].iloc[0]
             df_case_results["規劃效益"] = df_case_results["家人總共取得（萬）"] - baseline_value
 
             st.markdown("### 案例模擬結果")
@@ -467,36 +473,41 @@ class EstateTaxUI:
                 text="家人總共取得（萬）"
             )
             fig_bar_case.update_traces(texttemplate='%{text:.0f}', textposition='outside')
-            baseline_case = df_viz_case.loc[df_viz_case["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
+            baseline_case = df_viz_case.loc[
+                df_viz_case["規劃策略"] == "沒有規劃", "家人總共取得（萬）"
+            ].iloc[0]
+            # 將 "規劃效益" 標籤顯示在每個 bar 的垂直中間
             for idx, row in df_viz_case.iterrows():
                 if row["規劃策略"] != "沒有規劃":
                     diff = row["家人總共取得（萬）"] - baseline_case
                     diff_text = f"+{int(diff)}" if diff >= 0 else f"{int(diff)}"
                     fig_bar_case.add_annotation(
                         x=row["規劃策略"],
-                        y=row["家人總共取得（萬）"],
+                        y=row["家人總共取得（萬）"] / 2,
                         text=diff_text,
                         showarrow=False,
-                        font=dict(color="yellow", size=14),
-                        yshift=-50
+                        font=dict(color="yellow", size=20)
                     )
             max_value = df_viz_case["家人總共取得（萬）"].max()
             dtick = max_value / 10
-            fig_bar_case.update_layout(margin=dict(t=100), yaxis_range=[0, max_value + dtick], autosize=True)
+            fig_bar_case.update_layout(
+                margin=dict(t=150, b=150, l=50, r=50),
+                yaxis_range=[0, max_value + dtick * 5],
+                autosize=True,
+                height=600,
+                font=dict(size=20),
+                title_font=dict(size=24),
+                xaxis=dict(tickfont=dict(size=20)),
+                yaxis=dict(tickfont=dict(size=20))
+            )
             st.plotly_chart(fig_bar_case, use_container_width=True)
 
-        # ===============================
-        # 行銷資訊（所有人皆可檢視）
-        # ===============================
         st.markdown("---")
         st.markdown("## 想了解更多？")
         st.markdown("歡迎前往 **永傳家族辦公室**，我們提供專業的家族傳承與財富規劃服務。")
         st.markdown("[點此前往官網](https://www.gracefo.com)", unsafe_allow_html=True)
 
 
-# ===============================
-# 6. 主程式
-# ===============================
 if __name__ == "__main__":
     constants = TaxConstants()
     calculator = EstateTaxCalculator(constants)
