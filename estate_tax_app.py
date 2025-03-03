@@ -192,7 +192,6 @@ class EstateTaxUI:
     def render_ui(self):
         """渲染 Streamlit 介面"""
         st.set_page_config(page_title="AI秒算遺產稅", layout="wide")
-        # 設定字型大小（一般文字: 1.5em，主標題: 2.7em）
         st.markdown(
             """
             <style>
@@ -213,7 +212,6 @@ class EstateTaxUI:
             h3 {
                 color: #fd7e14 !important;
             }
-            /* 響應式設計：小螢幕下調整邊距 */
             @media only screen and (max-width: 768px) {
                 .css-18e3th9 {
                     padding-left: 1rem;
@@ -225,7 +223,6 @@ class EstateTaxUI:
             unsafe_allow_html=True
         )
 
-        # 主標題與下拉選單（下拉選單維持預設字型）
         st.markdown("<h1 class='main-header'>AI秒算遺產稅</h1>", unsafe_allow_html=True)
         st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
 
@@ -310,14 +307,10 @@ class EstateTaxUI:
             """
         )
 
-        # ===============================
-        # 保護區：模擬試算與效益評估（僅限授權使用者）
-        # ===============================
         st.markdown("---")
         st.markdown("## 模擬試算與效益評估 (僅限授權使用者)")
 
         login_container = st.empty()
-
         if not st.session_state.get("authenticated", False):
             with login_container.form("login_form"):
                 st.markdown("請先登入以檢視此區域內容。")
@@ -351,9 +344,7 @@ class EstateTaxUI:
             if default_premium > CASE_TOTAL_ASSETS:
                 default_premium = CASE_TOTAL_ASSETS
             premium_val = default_premium
-
             default_claim = int(premium_val * 1.5)
-
             remaining = CASE_TOTAL_ASSETS - premium_val
             if remaining >= 244:
                 default_gift = 244
@@ -497,8 +488,8 @@ class EstateTaxUI:
                 height=600,
                 font=dict(size=20),
                 title_font=dict(size=24),
-                xaxis_title={'text': "規劃策略", 'font': {'size': 20}},  # 將 x 軸標題字型設為 20
-                yaxis_title={'text': "家人總共取得（萬）", 'font': {'size': 20}},  # 將 y 軸標題字型設為 20
+                xaxis_title={'text': "規劃策略", 'font': {'size': 20}},
+                yaxis_title={'text': "家人總共取得（萬）", 'font': {'size': 20}},
                 xaxis=dict(tickfont=dict(size=20)),
                 yaxis=dict(tickfont=dict(size=20))
             )
