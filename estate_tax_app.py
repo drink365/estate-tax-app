@@ -467,7 +467,6 @@ class EstateTaxUI:
             baseline_case = df_viz_case.loc[
                 df_viz_case["規劃策略"] == "沒有規劃", "家人總共取得（萬）"
             ].iloc[0]
-            # 將 "規劃效益" 標籤顯示在每個 bar 的垂直中間
             for idx, row in df_viz_case.iterrows():
                 if row["規劃策略"] != "沒有規劃":
                     diff = row["家人總共取得（萬）"] - baseline_case
@@ -495,11 +494,14 @@ class EstateTaxUI:
             )
             st.plotly_chart(fig_bar_case, use_container_width=True)
 
-        st.markdown("---")
-        st.markdown(
-    '<a href="https://cvgift.streamlit.app/" target="_blank" style="font-size:14px;">贈與保單變更要保人</a>',
-    unsafe_allow_html=True
-)
+            # ============ 這裡是登入後才可見的連結 ============
+            st.markdown("---")
+            st.markdown("### 延伸工具")
+            st.markdown(
+                '<a href="https://cvgift.streamlit.app/" target="_blank" style="font-size:14px;">贈與保單變更要保人（試算器）</a>',
+                unsafe_allow_html=True
+            )
+            # =============================================
 
         st.markdown("---")
         st.markdown("## 想了解更多？")
