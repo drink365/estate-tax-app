@@ -496,6 +496,9 @@ class EstateTaxUI:
             st.plotly_chart(fig_bar_case, use_container_width=True)
 
         st.markdown("---")
+        st.markdown("[贈與保單變更要保人](https://cvgift.streamlit.app/)", unsafe_allow_html=True)
+
+        st.markdown("---")
         st.markdown("## 想了解更多？")
         st.markdown("歡迎前往 **永傳家族辦公室**，我們提供專業的家族傳承與財富規劃服務。")
         st.markdown("[點此前往官網](https://www.gracefo.com)", unsafe_allow_html=True)
