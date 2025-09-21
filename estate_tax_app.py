@@ -496,7 +496,10 @@ class EstateTaxUI:
             st.plotly_chart(fig_bar_case, use_container_width=True)
 
         st.markdown("---")
-        st.markdown("[贈與保單變更要保人](https://cvgift.streamlit.app/)", unsafe_allow_html=True)
+        st.markdown(
+    '<a href="https://cvgift.streamlit.app/" target="_blank" style="font-size:14px;">贈與保單變更要保人</a>',
+    unsafe_allow_html=True
+)
 
         st.markdown("---")
         st.markdown("## 想了解更多？")
