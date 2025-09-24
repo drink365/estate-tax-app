@@ -22,7 +22,7 @@ from modules.wrapped_cvgift import run_cvgift
 st.set_page_config(
     page_title="《影響力》傳承策略平台 | 整合版",
     layout="wide",
-    page_icon="assets/logo2.png",  # favicon 僅用 logo2.png
+    page_icon="assets/logo2.png",  # favicon
 )
 
 # ------------------------------------------------------------
@@ -34,55 +34,106 @@ ALLOW_TAKEOVER = True
 LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))  # 頁首 logo 高度
 
 # ------------------------------------------------------------
-# CSS：隱藏 Streamlit 頂部工具列/標頭，避免蓋到；同時讓圖中數字變白
+# CSS：品牌風格 + 隱藏預設工具列 + 視覺美化 + 圖中文字白色
 # ------------------------------------------------------------
 st.markdown(
     """
 <style>
-/* —— 隱藏 Streamlit 頂部工具列 / Header / Menu / Footer —— */
+:root{
+  --brand:#e11d48;          /* 主色（玫瑰紅） */
+  --brand-600:#be123c;
+  --ink:#1f2937;            /* 字色 */
+  --muted:#6b7280;          /* 次字色 */
+  --card-bg:#ffffffcc;      /* 卡片半透明 */
+  --card-bd:#e5e7eb;
+  --ring:#fda4af;           /* 聚焦光暈 */
+}
+
+/* 隱藏 Streamlit 頂部工具列/標頭/選單/頁尾，避免蓋到自訂標題 */
 [data-testid="stToolbar"] { visibility: hidden; height: 0; position: fixed; }
 header { visibility: hidden; height: 0; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* 適度上邊距，避免首屏被吃掉 */
-.stApp { padding-top: 0.75rem; }
-.block-container { padding-top: 0.5rem; }
+/* 背景：柔和漸層 + 細網格 */
+.stApp {
+  background:
+    radial-gradient(1200px 600px at -10% -20%, rgba(255,228,230,0.30), transparent 60%),
+    radial-gradient(1000px 500px at 110% -10%, rgba(254,215,170,0.25), transparent 60%),
+    linear-gradient(180deg, #fff, #fff9f9 30%, #fff 80%);
+  padding-top: 0.75rem;
+}
+.block-container{ padding-top: .5rem; max-width: 1200px; }
 
-/* 壓縮標題間距 */
-h1, h2, .stTitle { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
+/* 標題排版 */
+h1,h2,.stTitle{ margin:.2rem 0 !important; }
+h2{ color:var(--ink) !important; }
 
 /* 頁首 Logo：固定高度，不拉寬避免糊 */
-.header-logo {
-  height: """ + str(LOGO_CSS_HEIGHT) + """px;
-  width: auto;
-  display: block;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: optimizeQuality;
+.header-logo{
+  height: 56px;
+  width:auto; display:block;
+  image-rendering:-webkit-optimize-contrast;
+  image-rendering:optimizeQuality;
 }
 
-/* Tabs 微調 */
-.stTabs [role="tablist"] { gap: 2rem; }
-.stTabs [role="tab"] { font-size: 1.05rem; padding: 0.5rem 0.25rem; }
+/* 上方細分隔線（品牌色） */
+.hr-thin{
+  height:1px; background:linear-gradient(90deg, var(--brand), transparent);
+  border:0; margin:.75rem 0 1rem 0;
+}
+
+/* Tab 美化 */
+.stTabs [role="tablist"]{ gap:2rem; }
+.stTabs [role="tab"]{
+  font-size:1.06rem; padding:.6rem .25rem; color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.stTabs [role="tab"][aria-selected="true"]{
+  color:var(--brand); border-color:var(--brand);
+  font-weight:700;
+}
+
+/* 卡片容器（玻璃感） */
+.g-card{
+  background:var(--card-bg);
+  backdrop-filter:saturate(160%) blur(2px);
+  border:1px solid var(--card-bd);
+  border-radius:16px;
+  padding:1.25rem 1.25rem;
+  box-shadow:0 6px 20px rgba(0,0,0,.06);
+}
+
+/* 按鈕圓角＋陰影 */
+.stButton>button{
+  border-radius:999px !important;
+  padding:.55rem 1.1rem !important;
+  box-shadow:0 4px 12px rgba(225,29,72,.25);
+  border:1px solid var(--brand-600);
+}
+.stButton>button:hover{
+  filter:brightness(1.05);
+}
 
 /* 頂部資訊列 */
-.topbar { display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }
+.topbar{ display:flex; align-items:center; gap:.75rem; font-size:.95rem; color:var(--muted); }
 
-/* —— Plotly：柱內資料標籤＋註解（效益文字）強制白色 —— */
-.js-plotly-plot .bartext { fill: #ffffff !important; }
-.js-plotly-plot g.annotation text { fill: #ffffff !important; }
+/* Plotly：柱內資料標籤＋註解（效益文字）一律白色 */
+.js-plotly-plot .bartext{ fill:#ffffff !important; }
+.js-plotly-plot g.annotation text{ fill:#ffffff !important; }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ------------------------------------------------------------
-# Helpers：把圖片轉成 data URI（避免雲端路徑失效；支援 SVG / @2x）
+# Helpers：把圖片轉成 data URI（確保顯示；支援 SVG / @2x）
 # ------------------------------------------------------------
 def _data_uri_from_file(path: str, mime: str) -> str | None:
     try:
         with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
+            import base64 as _b64
+            b64 = _b64.b64encode(f.read()).decode("ascii")
         return f"data:{mime};base64,{b64}"
     except Exception:
         return None
@@ -104,7 +155,7 @@ def _render_header_logo():
         if uri:
             st.markdown(f"<img src='{uri}' alt='Logo' class='header-logo' />", unsafe_allow_html=True)
             return
-    st.write("")  # 都沒有就略過
+    st.write("")
 
 # ------------------------------------------------------------
 # Session store helpers（單一登入 + 逾時）
@@ -343,7 +394,7 @@ with col2:
         unsafe_allow_html=True,
     )
 
-st.divider()
+st.markdown('<hr class="hr-thin">', unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Top info bar：歡迎｜有效期限｜登出（單行靠左）
@@ -368,8 +419,10 @@ else:
     st.stop()
 
 # ------------------------------------------------------------
-# Top Tabs（取代側邊欄）
+# 美化：把主要內容放入卡片容器
 # ------------------------------------------------------------
+st.markdown('<div class="g-card">', unsafe_allow_html=True)
+
 tabs = st.tabs(["🏛️ 遺產稅試算（AI秒算遺產稅）", "🎁 保單贈與規劃（CVGift）"])
 
 with tabs[0]:
@@ -384,8 +437,10 @@ with tabs[1]:
     except Exception as e:
         st.error(f"載入保單贈與模組時發生錯誤：{e}")
 
+st.markdown('</div>', unsafe_allow_html=True)
+
 # ------------------------------------------------------------
 # Footer
 # ------------------------------------------------------------
 st.markdown("---")
-st.caption("《影響力》傳承策略平台｜永傳家族辦公室  ｜ 聯絡信箱：123@gracefo.com")
+st.caption("《影響力》傳承策略平台｜永傳家族辦公室 ｜ 聯絡信箱：123@gracefo.com")
