@@ -21,7 +21,7 @@ from modules.wrapped_cvgift import run_cvgift
 st.set_page_config(
     page_title="《影響力》傳承策略平台 | 整合版",
     layout="wide",
-    page_icon="assets/logo2.png",  # favicon 仍用 logo2.png
+    page_icon="assets/logo2.png",
 )
 
 # ------------------------------------------------------------
@@ -31,33 +31,37 @@ SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
 ALLOW_TAKEOVER = True
 
-# 可調整的頁首 Logo 高度（CSS 僅限高度，不做放大）
+# 可調整的頁首 Logo 高度（只限制高度，避免被放大而糊）
 LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))
 
 # ------------------------------------------------------------
-# Small CSS（壓縮頁首高度、避免標題被擠 / Logo 高清）
+# Small CSS：壓縮頁首高度、加上頂部 padding、Logo 高清
 # ------------------------------------------------------------
 st.markdown(
-    f"""
+    """
 <style>
-/* 壓縮標題與間距 */
-h1, h2, .stTitle {{ margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }}
+/* 避免首屏被切到：整體與主要容器加一點上內距 */
+.stApp { padding-top: 0.5rem; }
+.block-container { padding-top: 0.5rem; }
 
-/* 頁首 Logo：固定 CSS 高度、不強制寬度（避免放大糊） */
-.header-logo {{
-  height: {LOGO_CSS_HEIGHT}px;
+/* 壓縮標題間距 */
+h1, h2, .stTitle { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
+
+/* 頁首 Logo：固定高度，不拉寬避免糊 */
+.header-logo {
+  height: """ + str(LOGO_CSS_HEIGHT) + """px;
   width: auto;
   display: block;
   image-rendering: -webkit-optimize-contrast; /* Safari/WebKit */
   image-rendering: optimizeQuality;
-}}
+}
 
-/* Tabs 風格 */
-.stTabs [role="tablist"] {{ gap: 2rem; }}
-.stTabs [role="tab"] {{ font-size: 1.05rem; padding: 0.5rem 0.25rem; }}
+/* Tabs 微調 */
+.stTabs [role="tablist"] { gap: 2rem; }
+.stTabs [role="tab"] { font-size: 1.05rem; padding: 0.5rem 0.25rem; }
 
 /* 頂部資訊列 */
-.topbar {{ display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }}
+.topbar { display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -293,23 +297,20 @@ def ensure_auth():
 col1, col2 = st.columns([1, 6])
 
 with col1:
-    # 優先使用 SVG（最清晰）；否則使用 PNG + srcset（支援 @2x）
+    # 優先用 SVG；沒有就用 PNG + srcset（支援 Retina）
     if os.path.exists("assets/logo.svg"):
-        st.markdown(
-            f"<img src='assets/logo.svg' alt='Logo' class='header-logo' />",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<img src='assets/logo.svg' alt='Logo' class='header-logo' />", unsafe_allow_html=True)
     else:
-        # 若你放了 assets/logo@2x.png，Retina 顯示器會自動用 2x 圖
         st.markdown(
-            f\"\"\"
+            """
             <img
               src="assets/logo.png"
               srcset="assets/logo@2x.png 2x, assets/logo.png 1x"
               alt="Logo"
               class="header-logo"
             />
-            \"\"\", unsafe_allow_html=True
+            """,
+            unsafe_allow_html=True,
         )
 
 with col2:
@@ -344,7 +345,7 @@ else:
     st.stop()
 
 # ------------------------------------------------------------
-# Top Tabs（取代側邊欄）
+# Top Tabs（取代側欄）
 # ------------------------------------------------------------
 tabs = st.tabs(["🏛️ 遺產稅試算（AI秒算遺產稅）", "🎁 保單贈與規劃（CVGift）"])
 
