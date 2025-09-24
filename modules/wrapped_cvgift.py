@@ -5,8 +5,6 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-
-# === 贈與稅參數（單位：元） ===
 GIFT_EXEMPT_YEARLY = 2_440_000
 GIFT_BRACKETS = [
     (28_110_000, 0.10),
@@ -29,7 +27,6 @@ def gift_tax(net_amount: int) -> int:
 
 
 def summarize_plan(annual_premium: int, change_year: int, cv_map: dict) -> dict:
-    """示意：第 change_year 年變更要保人 → 贈與金額 = 當年年末現金價值"""
     gift_amount = int(cv_map.get(change_year, 0))
     net = max(0, gift_amount - GIFT_EXEMPT_YEARLY)
     tax = gift_tax(net)
@@ -72,8 +69,7 @@ def _benefit_cards():
         with cols[i % 4]:
             st.markdown(
                 f"""
-                <div style="border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px;
-                            background:#fff;">
+                <div style="border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px;background:#fff;">
                   <div style="font-weight:700;margin-bottom:6px;">{title}</div>
                   <div style="color:#6b7280;font-size:0.95rem;">{desc}</div>
                 </div>
@@ -95,21 +91,15 @@ def run_cvgift():
     st.markdown("### 輸入條件（單位：元）")
     col1, col2 = st.columns([1, 1])
     with col1:
-        annual_premium = st.number_input("年繳保費", min_value=0, step=100_000,
-                                         value=10_000_000, format="%d")
+        annual_premium = st.number_input("年繳保費", min_value=0, step=100_000, value=10_000_000, format="%d")
         change_year = st.selectbox("第幾年變更要保人", options=[1, 2, 3], index=0)
     with col2:
-        cv1 = st.number_input("第 1 年保價金（年末現金價值）", min_value=0, step=100_000,
-                              value=5_000_000, format="%d")
-        cv2 = st.number_input("第 2 年保價金（年末現金價值）", min_value=0, step=100_000,
-                              value=14_000_000, format="%d")
-        cv3 = st.number_input("第 3 年保價金（年末現金價值）", min_value=0, step=100_000,
-                              value=24_000_000, format="%d")
+        cv1 = st.number_input("第 1 年保價金（年末現金價值）", min_value=0, step=100_000, value=5_000_000, format="%d")
+        cv2 = st.number_input("第 2 年保價金（年末現金價值）", min_value=0, step=100_000, value=14_000_000, format="%d")
+        cv3 = st.number_input("第 3 年保價金（年末現金價值）", min_value=0, step=100_000, value=24_000_000, format="%d")
 
-    # 試算
     result = summarize_plan(annual_premium, change_year, {1: cv1, 2: cv2, 3: cv3})
 
-    # 效果總覽（讓使用者一秒看懂好處）
     st.markdown("### 效果總覽")
     colA, colB, colC = st.columns(3)
     with colA:
@@ -122,20 +112,21 @@ def run_cvgift():
     st.markdown("### 詳細結果")
     st.table(result["table"])
 
-    # 視覺化
     df_plot = pd.DataFrame(
         {
             "項目": ["贈與金額", "年免稅額", "贈與淨額", "估算贈與稅"],
             "金額（元）": [
-                result["gift_amount"], GIFT_EXEMPT_YEARLY,
-                result["net_amount"], result["gift_tax"],
+                result["gift_amount"],
+                GIFT_EXEMPT_YEARLY,
+                result["net_amount"],
+                result["gift_tax"],
             ],
         }
     )
     fig = px.bar(df_plot, x="項目", y="金額（元）", text="金額（元）", title="贈與試算（示意）")
     fig.update_traces(textposition="outside")
     fig.update_layout(margin=dict(t=80, b=50), height=480)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
 
     with st.expander("假設與備註", expanded=False):
         st.markdown(
