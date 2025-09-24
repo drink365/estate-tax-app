@@ -21,7 +21,7 @@ from modules.wrapped_cvgift import run_cvgift
 st.set_page_config(
     page_title="《影響力》傳承策略平台 | 整合版",
     layout="wide",
-    page_icon="assets/logo2.png",
+    page_icon="assets/logo2.png",  # favicon 仍用 logo2.png
 )
 
 # ------------------------------------------------------------
@@ -31,30 +31,40 @@ SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
 ALLOW_TAKEOVER = True
 
+# 可調整的頁首 Logo 高度（CSS 僅限高度，不做放大）
+LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))
+
 # ------------------------------------------------------------
-# Small CSS (壓縮頁首高度、避免標題被覆蓋)
+# Small CSS（壓縮頁首高度、避免標題被擠 / Logo 高清）
 # ------------------------------------------------------------
 st.markdown(
-    """
+    f"""
 <style>
-/* 壓縮 Streamlit 全域標題與間距 */
-h1, h2, .stTitle { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
-/* 頁首 Logo 尺寸（固定寬度，避免過高） */
-.header-logo { height: 56px; }
+/* 壓縮標題與間距 */
+h1, h2, .stTitle {{ margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }}
 
-/* Tabs 風格微調 */
-.stTabs [role="tablist"] { gap: 2rem; }
-.stTabs [role="tab"] { font-size: 1.05rem; padding: 0.5rem 0.25rem; }
+/* 頁首 Logo：固定 CSS 高度、不強制寬度（避免放大糊） */
+.header-logo {{
+  height: {LOGO_CSS_HEIGHT}px;
+  width: auto;
+  display: block;
+  image-rendering: -webkit-optimize-contrast; /* Safari/WebKit */
+  image-rendering: optimizeQuality;
+}}
 
-/* 頂部資訊列字色 */
-.topbar { display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }
+/* Tabs 風格 */
+.stTabs [role="tablist"] {{ gap: 2rem; }}
+.stTabs [role="tab"] {{ font-size: 1.05rem; padding: 0.5rem 0.25rem; }}
+
+/* 頂部資訊列 */
+.topbar {{ display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ------------------------------------------------------------
-# Session store helpers (單一登入 + 逾時)
+# Session store helpers（單一登入 + 逾時）
 # ------------------------------------------------------------
 _store_lock = threading.Lock()
 
@@ -194,7 +204,7 @@ def _check_login(username: str, password: str, users: dict):
     return True, u
 
 # ------------------------------------------------------------
-# Auth flow (no sidebar)
+# Auth flow（無側欄）
 # ------------------------------------------------------------
 def _auth_debug_panel(users: dict):
     if os.environ.get("AUTH_DEBUG", "0") != "1":
@@ -278,14 +288,30 @@ def ensure_auth():
     return True
 
 # ------------------------------------------------------------
-# Header: Logo(logo.png) + Title 同一行
+# Header：Logo（SVG / @2x retina）＋ Title 同一行
 # ------------------------------------------------------------
-col1, col2 = st.columns([1, 6], vertical_alignment="center")
+col1, col2 = st.columns([1, 6])
+
 with col1:
-    try:
-        st.image("assets/logo.png", use_container_width=False, output_format="PNG", caption=None, width=150)
-    except Exception:
-        st.write("")  # 安靜略過
+    # 優先使用 SVG（最清晰）；否則使用 PNG + srcset（支援 @2x）
+    if os.path.exists("assets/logo.svg"):
+        st.markdown(
+            f"<img src='assets/logo.svg' alt='Logo' class='header-logo' />",
+            unsafe_allow_html=True,
+        )
+    else:
+        # 若你放了 assets/logo@2x.png，Retina 顯示器會自動用 2x 圖
+        st.markdown(
+            f\"\"\"
+            <img
+              src="assets/logo.png"
+              srcset="assets/logo@2x.png 2x, assets/logo.png 1x"
+              alt="Logo"
+              class="header-logo"
+            />
+            \"\"\", unsafe_allow_html=True
+        )
+
 with col2:
     st.markdown(
         "<h2 style='margin:0;'>《影響力》傳承策略平台｜整合版</h2>"
@@ -296,14 +322,14 @@ with col2:
 st.divider()
 
 # ------------------------------------------------------------
-# Top info bar: 歡迎｜有效期限｜登出（單行靠左）
+# Top info bar：歡迎｜有效期限｜登出（單行靠左）
 # ------------------------------------------------------------
 if ensure_auth():
     exp_date = st.session_state.get("end_date")
     exp_str = exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, _dt.date) else "N/A"
     name = st.session_state.get("user", "")
 
-    info_col1, info_col2, _ = st.columns([8, 1.5, 10], vertical_alignment="center")
+    info_col1, info_col2, _ = st.columns([8, 1.5, 10])
     with info_col1:
         st.markdown(f"<div class='topbar'>歡迎，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
     with info_col2:
