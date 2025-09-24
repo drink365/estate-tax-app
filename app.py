@@ -2,20 +2,18 @@ import os
 import json
 import time
 import secrets
+import base64
 import datetime as _dt
 import threading
-import base64
 import streamlit as st
 
-# ---- 你現有的功能模組（保持不變）----
+# 功能頁（保留你原本的模組名稱）
 from modules.wrapped_estate import run_estate
 from modules.wrapped_cvgift import run_cvgift
 
-# =========================
-# 基本設定
-# =========================
+# ================ 基本設定 ================
 st.set_page_config(
-    page_title="《影響力》傳承策略平台 | 整合版",
+    page_title="《影響力》傳承策略平台｜整合版",
     layout="wide",
     page_icon="assets/logo2.png",  # favicon
 )
@@ -23,9 +21,7 @@ st.set_page_config(
 SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
 
-# =========================
-# 載入 assets/logo.png（以 data URI 方式避免路徑問題）
-# =========================
+# ================ 載入 assets/logo.png（避免路徑問題，用 data URI） ================
 def load_logo(path="assets/logo.png"):
     try:
         with open(path, "rb") as f:
@@ -36,9 +32,7 @@ def load_logo(path="assets/logo.png"):
 
 logo_data_uri = load_logo()
 
-# =========================
-# CSS 美化（含響應式 Logo 與標題）
-# =========================
+# ================ 全域樣式（含 logo/標題對齊、Tabs、統一功能頁標題） ================
 INK   = "#111827"
 MUTED = "#6b7280"
 BRAND = "#e11d48"
@@ -46,11 +40,11 @@ BRAND = "#e11d48"
 st.markdown(
     f"""
 <style>
-/* 隱藏 Streamlit 頂列/選單/頁尾，避免壓住標題 */
-[data-testid="stToolbar"] {{ visibility: hidden; height: 0; position: fixed; }}
-header {{ visibility: hidden; height: 0; }}
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
+/* 隱藏 Streamlit 內建頂列/選單/頁尾，避免壓到主標題 */
+[data-testid="stToolbar"] {{ visibility:hidden; height:0; position:fixed; }}
+header {{ visibility:hidden; height:0; }}
+#MainMenu {{ visibility:hidden; }}
+footer {{ visibility:hidden; }}
 
 /* 背景與容器 */
 .stApp {{
@@ -59,23 +53,18 @@ footer {{ visibility: hidden; }}
 }}
 .block-container {{ padding-top: .25rem; max-width: 1200px; }}
 
-/* Header：Logo + Title（響應式） */
+/* Header：Logo + Title（同一行垂直置中；手機自動換行） */
 .header-wrap {{
   display:flex; align-items:center; gap:14px; flex-wrap:wrap;
 }}
 .header-logo {{
-  height: clamp(28px, 6vw, 44px);  /* 手機≈28–36px，桌機最多44px */
-  width:auto; display:block;
-  image-rendering:-webkit-optimize-contrast;
-  image-rendering:optimizeQuality;
+  height: clamp(28px, 6vw, 44px);  /* 手機≈28–36px；桌機≤44px */
+  width:auto; display:inline-block; vertical-align:middle;
+  image-rendering:-webkit-optimize-contrast; image-rendering:optimizeQuality;
 }}
 .header-text h1 {{
-  /* clamp(最小, 首選, 最大) -> 手機不會爆字，桌機仍醒目 */
   font-size: clamp(22px, 3.4vw, 38px);
-  line-height: 1.15;
-  margin: 0;
-  color: {INK};
-  font-weight: 800;
+  line-height: 1.15; margin: 0; color: {INK}; font-weight: 800; vertical-align:middle;
 }}
 .header-text p {{
   margin: 2px 0 0 0; color: {MUTED}; font-size: .95rem;
@@ -104,16 +93,18 @@ footer {{ visibility: hidden; }}
 
 /* 右上登出：低調 */
 .logout-btn>button {{
-  border-radius:4px !important;
-  padding:.35rem .75rem !important;
-  box-shadow:none !important;
-  border:1px solid #d1d5db !important;
-  color:#374151 !important;
-  background:#f9fafb !important;
-  font-size:.85rem !important;
+  border-radius:4px !important; padding:.35rem .75rem !important;
+  box-shadow:none !important; border:1px solid #d1d5db !important;
+  color:#374151 !important; background:#f9fafb !important; font-size:.85rem !important;
 }}
-.logout-btn>button:hover {{
-  background:#f3f4f6 !important; color:#111827 !important;
+.logout-btn>button:hover {{ background:#f3f4f6 !important; color:#111827 !important; }}
+
+/* 統一「功能頁」主標題樣式（之後所有功能頁用 .page-title 即可） */
+.page-title {{
+  font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 700;
+  color: {INK};
+  margin: 1rem 0 .5rem 0;
 }}
 
 /* Plotly：柱內數字 & 註解改白色 */
@@ -124,9 +115,7 @@ footer {{ visibility: hidden; }}
     unsafe_allow_html=True,
 )
 
-# =========================
-# 單點登入（沿用你先前版本）
-# =========================
+# ================（可複用）簡易單點登入 ================
 _store_lock = threading.Lock()
 
 def _load_store() -> dict:
@@ -157,10 +146,6 @@ def _set_active_session(username_l: str, token: str, meta: dict):
         s[username_l] = {"token": token, "last_seen": int(time.time()), "meta": meta}
         _save_store(s)
 
-def _get_active_session(username_l: str):
-    with _store_lock:
-        s = _load_store(); _cleanup_store(s); return s.get(username_l)
-
 def _refresh_active_session(username_l: str, token: str):
     with _store_lock:
         s = _load_store(); sess = s.get(username_l)
@@ -180,25 +165,21 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
 
     raw = os.environ.get(env_key, "")
     data = None
+
     if raw.strip():
-        try:
-            data = _toml.loads(raw.strip())
-        except Exception:
-            st.error("授權設定（AUTHORIZED_USERS）格式有誤（ENV）。"); st.stop()
+        try: data = _toml.loads(raw.strip())
+        except Exception: st.error("ENV AUTHORIZED_USERS TOML 格式錯誤"); st.stop()
+
     if data is None:
-        try:
-            sec = st.secrets.get("AUTHORIZED_USERS", None)
-        except Exception:
-            sec = None
+        try: sec = st.secrets.get("AUTHORIZED_USERS", None)
+        except Exception: sec = None
         if isinstance(sec, str) and sec.strip():
-            try:
-                data = _toml.loads(sec.strip())
-            except Exception:
-                st.error("授權設定（AUTHORIZED_USERS）格式有誤（secrets 字串）。"); st.stop()
+            try: data = _toml.loads(sec.strip())
+            except Exception: st.error("secrets AUTHORIZED_USERS TOML 格式錯誤"); st.stop()
         elif isinstance(sec, dict):
             data = dict(sec)
-    if data is None:
-        return {}
+
+    if data is None: return {}
 
     users = {}
     auth = data.get("authorized_users", {}) if isinstance(data, dict) else {}
@@ -234,12 +215,8 @@ def _login_flow(users: dict):
         takeover = st.checkbox("若此帳號已在其他裝置登入，允許我搶下使用權（登出他人）", value=True)
         if st.form_submit_button("登入"):
             ok, info = _check_login(u, p, users)
-            if not ok:
-                st.error("帳號或密碼錯誤，或帳號已過期"); return
+            if not ok: st.error("帳號或密碼錯誤，或帳號已過期"); return
             username_l = info["username"].lower().strip()
-            active = _get_active_session(username_l)
-            if active and not takeover:
-                st.warning("此帳號目前已在其他裝置登入。請勾選上方選項以登入。"); return
             token = secrets.token_urlsafe(24)
             st.session_state.update({
                 "authed": True,
@@ -263,9 +240,7 @@ def ensure_auth() -> bool:
         st.session_state.clear(); _login_flow(users); return False
     return True
 
-# =========================
-# Header（logo + 主標題）
-# =========================
+# ================ Header：logo + 平台主標題（單一位置） ================
 if logo_data_uri:
     st.markdown(
         f"""
@@ -292,9 +267,7 @@ else:
 
 st.markdown('<hr class="hr-thin">', unsafe_allow_html=True)
 
-# =========================
-# Top info bar：歡迎 😀｜有效期限｜登出
-# =========================
+# ================ 歡迎列＋登出（低調） ================
 if ensure_auth():
     exp_date = st.session_state.get("end_date")
     exp_str = exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, _dt.date) else "N/A"
@@ -305,35 +278,29 @@ if ensure_auth():
         st.markdown(f"<div style='color:{MUTED};font-size:.95rem;'>歡迎 😀，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
     with c2:
         st.markdown("<div class='logout-btn'>", unsafe_allow_html=True)
-        if st.button("登出", use_container_width=True, type="secondary", key="logout_btn"):
-            try:
-                _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
-            except Exception:
-                pass
+        if st.button("登出", use_container_width=True, key="logout_btn"):
+            try: _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
+            except Exception: pass
             st.session_state.clear(); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 else:
     st.stop()
 
-# =========================
-# Tabs（不再在 app.py 內放分頁標題，避免與模組重複）
-# =========================
+# ================ Tabs：只放功能內容，不再於此加分頁標題（避免重複） ================
 tabs = st.tabs(["🏛️ 遺產稅試算", "🎁 保單贈與規劃"])
 
 with tabs[0]:
     try:
-        run_estate()   # 由 wrapped_estate 內部負責顯示「遺產稅試算」標題
+        run_estate()   # 由功能模組自行顯示 .page-title（單一標題）
     except Exception as e:
         st.error(f"載入遺產稅模組時發生錯誤：{e}")
 
 with tabs[1]:
     try:
-        run_cvgift()   # 由 wrapped_cvgift 內部負責顯示該頁標題
+        run_cvgift()   # 由功能模組自行顯示 .page-title（單一標題）
     except Exception as e:
         st.error(f"載入保單贈與模組時發生錯誤：{e}")
 
-# =========================
-# Footer
-# =========================
+# ================ Footer ================
 st.markdown("---")
 st.caption("《影響力》傳承策略平台｜永傳家族辦公室 ｜ 聯絡信箱：123@gracefo.com")
