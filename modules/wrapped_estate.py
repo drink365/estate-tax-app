@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import math
 import plotly.express as px
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, List
 from datetime import datetime
 import time
 from dataclasses import dataclass, field
@@ -95,6 +95,7 @@ class EstateTaxUI:
         disabled_people_input = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=10, value=0)
         other_dependents_input = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0)
 
+        # ---------------- 計算基礎稅額 ----------------
         try:
             taxable_amount, tax_due, _ = self.calculator.calculate_estate_tax(
                 total_assets_input, has_spouse, adult_children_input,
@@ -105,6 +106,99 @@ class EstateTaxUI:
             return
 
         st.markdown(f"## 預估遺產稅：{tax_due:,.0f} 萬元")
+
+        # ---------------- 策略模擬 ----------------
+        st.markdown("---")
+        st.markdown("## 模擬試算與效益評估")
+
+        CASE_TOTAL_ASSETS = total_assets_input
+        CASE_SPOUSE = has_spouse
+        CASE_ADULT_CHILDREN = adult_children_input
+        CASE_PARENTS = parents_input
+        CASE_DISABLED = disabled_people_input
+        CASE_OTHER = other_dependents_input
+
+        default_premium = int(math.ceil(tax_due / 10) * 10)
+        if default_premium > CASE_TOTAL_ASSETS:
+            default_premium = CASE_TOTAL_ASSETS
+        premium_case = st.number_input("購買保險保費（萬）", min_value=0, max_value=CASE_TOTAL_ASSETS, value=default_premium, step=100)
+        claim_case = st.number_input("保險理賠金（萬）", min_value=0, max_value=100000, value=int(premium_case * 1.5), step=100)
+        gift_case = st.number_input("提前贈與金額（萬）", min_value=0, max_value=CASE_TOTAL_ASSETS - premium_case, value=244, step=100)
+
+        # 沒有規劃
+        _, tax_case_no_plan, _ = self.calculator.calculate_estate_tax(
+            CASE_TOTAL_ASSETS, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
+        )
+        net_case_no_plan = CASE_TOTAL_ASSETS - tax_case_no_plan
+
+        # 提前贈與
+        effective_case_gift = CASE_TOTAL_ASSETS - gift_case
+        _, tax_case_gift, _ = self.calculator.calculate_estate_tax(
+            effective_case_gift, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
+        )
+        net_case_gift = effective_case_gift - tax_case_gift + gift_case
+
+        # 購買保險
+        effective_case_insurance = CASE_TOTAL_ASSETS - premium_case
+        _, tax_case_insurance, _ = self.calculator.calculate_estate_tax(
+            effective_case_insurance, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
+        )
+        net_case_insurance = effective_case_insurance - tax_case_insurance + claim_case
+
+        # 贈與 + 保險（未被課稅）
+        effective_case_combo_not_tax = CASE_TOTAL_ASSETS - gift_case - premium_case
+        _, tax_case_combo_not_tax, _ = self.calculator.calculate_estate_tax(
+            effective_case_combo_not_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
+        )
+        net_case_combo_not_tax = effective_case_combo_not_tax - tax_case_combo_not_tax + claim_case + gift_case
+
+        # 贈與 + 保險（被實質課稅）
+        effective_case_combo_tax = CASE_TOTAL_ASSETS - gift_case - premium_case + claim_case
+        _, tax_case_combo_tax, _ = self.calculator.calculate_estate_tax(
+            effective_case_combo_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
+        )
+        net_case_combo_tax = effective_case_combo_tax - tax_case_combo_tax + gift_case
+
+        # ---------------- 結果表格 ----------------
+        case_data = {
+            "規劃策略": [
+                "沒有規劃",
+                "提前贈與",
+                "購買保險",
+                "提前贈與＋購買保險",
+                "提前贈與＋購買保險（被實質課稅）"
+            ],
+            "遺產稅（萬）": [
+                int(tax_case_no_plan),
+                int(tax_case_gift),
+                int(tax_case_insurance),
+                int(tax_case_combo_not_tax),
+                int(tax_case_combo_tax)
+            ],
+            "家人總共取得（萬）": [
+                int(net_case_no_plan),
+                int(net_case_gift),
+                int(net_case_insurance),
+                int(net_case_combo_not_tax),
+                int(net_case_combo_tax)
+            ]
+        }
+        df_case_results = pd.DataFrame(case_data)
+        baseline_value = df_case_results.loc[df_case_results["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
+        df_case_results["規劃效益"] = df_case_results["家人總共取得（萬）"] - baseline_value
+
+        st.table(df_case_results)
+
+        # ---------------- 視覺化 ----------------
+        fig_bar_case = px.bar(
+            df_case_results,
+            x="規劃策略",
+            y="家人總共取得（萬）",
+            title="不同規劃策略下家人總共取得金額比較",
+            text="家人總共取得（萬）"
+        )
+        fig_bar_case.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+        st.plotly_chart(fig_bar_case, use_container_width=True)
 
 
 # ===============================
