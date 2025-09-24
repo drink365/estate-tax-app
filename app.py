@@ -339,7 +339,7 @@ with col1:
 with col2:
     st.markdown(
         "<h2 style='margin:0;'>《影響力》傳承策略平台｜整合版</h2>"
-        "<p style='margin:0;color:#6b7280;font-size:0.95rem;'>專業 × 溫度 × 智能｜Estate Tax Simulator + 保單贈與規劃</p>",
+        "<p style='margin:0;color:#6b7280;font-size:0.95rem;'>專業 × 溫度 × 智能｜遺產稅試算 + 保單贈與規劃</p>",
         unsafe_allow_html=True,
     )
 
