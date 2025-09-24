@@ -17,12 +17,12 @@ from modules.wrapped_estate import run_estate
 from modules.wrapped_cvgift import run_cvgift
 
 # ------------------------------------------------------------
-# Page config (favicon = logo2.png)
+# Page config
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="《影響力》傳承策略平台 | 整合版",
     layout="wide",
-    page_icon="assets/logo2.png",
+    page_icon="assets/logo2.png",  # favicon 僅用 logo2.png
 )
 
 # ------------------------------------------------------------
@@ -31,19 +31,28 @@ st.set_page_config(
 SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
 ALLOW_TAKEOVER = True
-LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))  # 調整頁首 logo 高度
+LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))  # 頁首 logo 高度
 
 # ------------------------------------------------------------
-# CSS（壓縮間距、防切到、高清 Logo）
+# CSS：隱藏 Streamlit 頂部工具列/標頭，避免蓋到；同時讓圖中數字變白
 # ------------------------------------------------------------
 st.markdown(
     """
 <style>
-.stApp { padding-top: 0.5rem; }
+/* —— 隱藏 Streamlit 頂部工具列 / Header / Menu / Footer —— */
+[data-testid="stToolbar"] { visibility: hidden; height: 0; position: fixed; }
+header { visibility: hidden; height: 0; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+
+/* 適度上邊距，避免首屏被吃掉 */
+.stApp { padding-top: 0.75rem; }
 .block-container { padding-top: 0.5rem; }
 
+/* 壓縮標題間距 */
 h1, h2, .stTitle { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
 
+/* 頁首 Logo：固定高度，不拉寬避免糊 */
 .header-logo {
   height: """ + str(LOGO_CSS_HEIGHT) + """px;
   width: auto;
@@ -52,17 +61,23 @@ h1, h2, .stTitle { margin-top: 0.2rem !important; margin-bottom: 0.2rem !importa
   image-rendering: optimizeQuality;
 }
 
+/* Tabs 微調 */
 .stTabs [role="tablist"] { gap: 2rem; }
 .stTabs [role="tab"] { font-size: 1.05rem; padding: 0.5rem 0.25rem; }
 
+/* 頂部資訊列 */
 .topbar { display:flex; align-items:center; gap:0.75rem; font-size:0.95rem; color:#6b7280; }
+
+/* —— Plotly：柱內資料標籤＋註解（效益文字）強制白色 —— */
+.js-plotly-plot .bartext { fill: #ffffff !important; }
+.js-plotly-plot g.annotation text { fill: #ffffff !important; }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ------------------------------------------------------------
-# Helpers：把圖片轉成 data URI（避免路徑失效）
+# Helpers：把圖片轉成 data URI（避免雲端路徑失效；支援 SVG / @2x）
 # ------------------------------------------------------------
 def _data_uri_from_file(path: str, mime: str) -> str | None:
     try:
@@ -73,33 +88,23 @@ def _data_uri_from_file(path: str, mime: str) -> str | None:
         return None
 
 def _render_header_logo():
-    """
-    優先使用 SVG；若無則用 PNG（優先 logo@2x.png，否則 logo.png）。
-    全部以 data URI 內嵌，避免雲端路徑問題，同時支援 Retina 清晰顯示。
-    """
-    # 1) SVG（最清晰）
+    """優先用 SVG；否則 logo@2x.png；再不行 logo.png —— 全用 data URI 內嵌以確保顯示"""
     if os.path.exists("assets/logo.svg"):
         uri = _data_uri_from_file("assets/logo.svg", "image/svg+xml")
         if uri:
             st.markdown(f"<img src='{uri}' alt='Logo' class='header-logo' />", unsafe_allow_html=True)
             return
-
-    # 2) PNG @2x（Retina）
     if os.path.exists("assets/logo@2x.png"):
         uri = _data_uri_from_file("assets/logo@2x.png", "image/png")
         if uri:
             st.markdown(f"<img src='{uri}' alt='Logo' class='header-logo' />", unsafe_allow_html=True)
             return
-
-    # 3) PNG 一般圖
     if os.path.exists("assets/logo.png"):
         uri = _data_uri_from_file("assets/logo.png", "image/png")
         if uri:
             st.markdown(f"<img src='{uri}' alt='Logo' class='header-logo' />", unsafe_allow_html=True)
             return
-
-    # 4) 若以上都不在，就不顯示（避免報錯）
-    st.write("")
+    st.write("")  # 都沒有就略過
 
 # ------------------------------------------------------------
 # Session store helpers（單一登入 + 逾時）
@@ -329,10 +334,8 @@ def ensure_auth():
 # Header：Logo（SVG / @2x）以 data URI 內嵌＋ Title 同一行
 # ------------------------------------------------------------
 col1, col2 = st.columns([1, 6])
-
 with col1:
     _render_header_logo()
-
 with col2:
     st.markdown(
         "<h2 style='margin:0;'>《影響力》傳承策略平台｜整合版</h2>"
