@@ -2,7 +2,7 @@
 
 - 單一登入整合：遺產稅試算 + 保單贈與（內嵌執行，無外連網址）
 - 多使用者（TOML, 環境變數 `AUTHORIZED_USERS`）與**單一會話限制**（避免共用帳號）
-- 30 分鐘無操作自動過期（可用 `SESSION_TTL_SECONDS` 調整）
+- 60 分鐘無操作自動過期（可用 `SESSION_TTL_SECONDS` 調整）
 
 ## AUTHORIZED_USERS 範例（TOML）
 ```toml
@@ -33,7 +33,7 @@ end_date = "2025-07-31"
 > 只有在 `start_date ≤ 今日 ≤ end_date` 的帳號會被當作有效。
 
 ## 其他環境變數
-- `SESSION_TTL_SECONDS`：會話逾時秒數（預設 1800 = 30 分鐘）。
+- `SESSION_TTL_SECONDS`：會話逾時秒數（預設 3600 = 60 分鐘）。
 - `SESSION_STORE_PATH`：會話儲存檔案位置（預設 `.sessions.json`）。
 
 ## 執行
