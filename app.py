@@ -40,22 +40,21 @@ st.markdown(
     """
 <style>
 :root{
-  --brand:#e11d48;          /* 主色（玫瑰紅） */
+  --brand:#e11d48;
   --brand-600:#be123c;
-  --ink:#1f2937;            /* 字色 */
-  --muted:#6b7280;          /* 次字色 */
-  --card-bg:#ffffffcc;      /* 卡片半透明 */
+  --ink:#1f2937;
+  --muted:#6b7280;
+  --card-bg:#ffffffcc;
   --card-bd:#e5e7eb;
-  --ring:#fda4af;           /* 聚焦光暈 */
 }
 
-/* 隱藏 Streamlit 頂部工具列/標頭/選單/頁尾，避免蓋到自訂標題 */
+/* 隱藏 Streamlit 頂部工具列/標頭/選單/頁尾 */
 [data-testid="stToolbar"] { visibility: hidden; height: 0; position: fixed; }
 header { visibility: hidden; height: 0; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* 背景：柔和漸層 + 細網格 */
+/* 背景 */
 .stApp {
   background:
     radial-gradient(1200px 600px at -10% -20%, rgba(255,228,230,0.30), transparent 60%),
@@ -65,11 +64,11 @@ footer { visibility: hidden; }
 }
 .block-container{ padding-top: .5rem; max-width: 1200px; }
 
-/* 標題排版 */
+/* 標題 */
 h1,h2,.stTitle{ margin:.2rem 0 !important; }
 h2{ color:var(--ink) !important; }
 
-/* 頁首 Logo：固定高度，不拉寬避免糊 */
+/* Logo */
 .header-logo{
   height: 56px;
   width:auto; display:block;
@@ -77,13 +76,13 @@ h2{ color:var(--ink) !important; }
   image-rendering:optimizeQuality;
 }
 
-/* 上方細分隔線（品牌色） */
+/* 分隔線 */
 .hr-thin{
   height:1px; background:linear-gradient(90deg, var(--brand), transparent);
   border:0; margin:.75rem 0 1rem 0;
 }
 
-/* Tab 美化 */
+/* Tabs */
 .stTabs [role="tablist"]{ gap:2rem; }
 .stTabs [role="tab"]{
   font-size:1.06rem; padding:.6rem .25rem; color:var(--muted);
@@ -94,7 +93,7 @@ h2{ color:var(--ink) !important; }
   font-weight:700;
 }
 
-/* 卡片容器（玻璃感） */
+/* 卡片 */
 .g-card{
   background:var(--card-bg);
   backdrop-filter:saturate(160%) blur(2px);
@@ -104,21 +103,24 @@ h2{ color:var(--ink) !important; }
   box-shadow:0 6px 20px rgba(0,0,0,.06);
 }
 
-/* 按鈕圓角＋陰影 */
-.stButton>button{
-  border-radius:999px !important;
-  padding:.55rem 1.1rem !important;
-  box-shadow:0 4px 12px rgba(225,29,72,.25);
-  border:1px solid var(--brand-600);
+/* 登出按鈕：簡潔版，移除圓角＋陰影 */
+.logout-btn>button{
+  border-radius:4px !important;
+  padding:.4rem .9rem !important;
+  box-shadow:none !important;
+  border:1px solid #d1d5db !important;
+  color:#374151 !important;
+  background:#f9fafb !important;
 }
-.stButton>button:hover{
-  filter:brightness(1.05);
+.logout-btn>button:hover{
+  background:#f3f4f6 !important;
+  color:#111827 !important;
 }
 
 /* 頂部資訊列 */
 .topbar{ display:flex; align-items:center; gap:.75rem; font-size:.95rem; color:var(--muted); }
 
-/* Plotly：柱內資料標籤＋註解（效益文字）一律白色 */
+/* Plotly 標籤白色 */
 .js-plotly-plot .bartext{ fill:#ffffff !important; }
 .js-plotly-plot g.annotation text{ fill:#ffffff !important; }
 </style>
@@ -127,7 +129,7 @@ h2{ color:var(--ink) !important; }
 )
 
 # ------------------------------------------------------------
-# Helpers：把圖片轉成 data URI（確保顯示；支援 SVG / @2x）
+# Helpers：圖片 data URI
 # ------------------------------------------------------------
 def _data_uri_from_file(path: str, mime: str) -> str | None:
     try:
@@ -139,7 +141,6 @@ def _data_uri_from_file(path: str, mime: str) -> str | None:
         return None
 
 def _render_header_logo():
-    """優先用 SVG；否則 logo@2x.png；再不行 logo.png —— 全用 data URI 內嵌以確保顯示"""
     if os.path.exists("assets/logo.svg"):
         uri = _data_uri_from_file("assets/logo.svg", "image/svg+xml")
         if uri:
@@ -158,7 +159,7 @@ def _render_header_logo():
     st.write("")
 
 # ------------------------------------------------------------
-# Session store helpers（單一登入 + 逾時）
+# Session store helpers
 # ------------------------------------------------------------
 _store_lock = threading.Lock()
 
@@ -218,7 +219,7 @@ def _invalidate_session(username_l: str):
             _save_store(store)
 
 # ------------------------------------------------------------
-# Load users from ENV / secrets (TOML)
+# Load users
 # ------------------------------------------------------------
 def _load_users(env_key: str = "AUTHORIZED_USERS"):
     raw = os.environ.get(env_key, "")
@@ -228,7 +229,7 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
         try:
             data = _toml.loads(raw.strip())
         except Exception:
-            st.error("授權設定（AUTHORIZED_USERS）格式錯誤（ENV）。請確認為 TOML。")
+            st.error("授權設定（AUTHORIZED_USERS）格式錯誤（ENV）。")
             st.stop()
 
     if data is None:
@@ -241,21 +242,10 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
                 try:
                     data = _toml.loads(sec.strip())
                 except Exception:
-                    st.error("授權設定（AUTHORIZED_USERS）格式錯誤（SECRETS 字串）。")
+                    st.error("授權設定（AUTHORIZED_USERS）格式錯誤（SECRETS）。")
                     st.stop()
             elif isinstance(sec, dict):
                 data = dict(sec)
-            else:
-                st.error("授權設定（AUTHORIZED_USERS）於 st.secrets 中格式不支援。")
-                st.stop()
-
-    if data is None:
-        try:
-            maybe = dict(st.secrets)
-            if "authorized_users" in maybe:
-                data = maybe
-        except Exception:
-            pass
 
     if data is None:
         return {}
@@ -298,30 +288,9 @@ def _check_login(username: str, password: str, users: dict):
     return True, u
 
 # ------------------------------------------------------------
-# Auth flow（無側欄）
+# Login flow
 # ------------------------------------------------------------
-def _auth_debug_panel(users: dict):
-    if os.environ.get("AUTH_DEBUG", "0") != "1":
-        return
-    with st.expander("🔧 授權診斷（僅在 AUTH_DEBUG=1 顯示）", expanded=False):
-        st.dataframe(
-            [
-                {
-                    "username_key": k,
-                    "username": v.get("username"),
-                    "name": v.get("name"),
-                    "role": v.get("role"),
-                    "start_date": v.get("start_date"),
-                    "end_date": v.get("end_date"),
-                }
-                for k, v in users.items()
-            ],
-            use_container_width=True,
-        )
-
 def do_login(users: dict):
-    _auth_debug_panel(users)
-
     st.markdown("### 會員登入")
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("帳號", value="", autocomplete="username")
@@ -337,7 +306,7 @@ def do_login(users: dict):
         username_l = info["username"].strip().lower()
         active = _get_active_session(username_l)
         if active and not takeover:
-            st.warning("此帳號目前已在其他裝置使用，若要登入請勾選『允許我搶下使用權』。")
+            st.warning("此帳號目前已在其他裝置使用。")
             return
 
         token = secrets.token_urlsafe(24)
@@ -354,7 +323,6 @@ def do_login(users: dict):
             }
         )
         _set_active_session(username_l, token, {"ts": int(time.time())})
-        st.success(f"登入成功，歡迎 {info['name']}")
         st.rerun()
 
 def ensure_auth():
@@ -371,9 +339,7 @@ def ensure_auth():
         return False
 
     active = _get_active_session(user_l)
-    _auth_debug_panel(users)
     if not active or active.get("token") != token:
-        st.warning("此帳號已在其他裝置登入，您已被登出。")
         st.session_state.clear()
         do_login(users)
         return False
@@ -382,7 +348,7 @@ def ensure_auth():
     return True
 
 # ------------------------------------------------------------
-# Header：Logo（SVG / @2x）以 data URI 內嵌＋ Title 同一行
+# Header
 # ------------------------------------------------------------
 col1, col2 = st.columns([1, 6])
 with col1:
@@ -397,7 +363,7 @@ with col2:
 st.markdown('<hr class="hr-thin">', unsafe_allow_html=True)
 
 # ------------------------------------------------------------
-# Top info bar：歡迎｜有效期限｜登出（單行靠左）
+# Top info bar
 # ------------------------------------------------------------
 if ensure_auth():
     exp_date = st.session_state.get("end_date")
@@ -406,9 +372,9 @@ if ensure_auth():
 
     info_col1, info_col2, _ = st.columns([8, 1.5, 10])
     with info_col1:
-        st.markdown(f"<div class='topbar'>歡迎，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='topbar'>歡迎 😀，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
     with info_col2:
-        if st.button("登出", key="top_logout", use_container_width=True):
+        if st.button("登出", key="top_logout", use_container_width=True, type="secondary"):
             try:
                 _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
             except Exception:
@@ -419,7 +385,7 @@ else:
     st.stop()
 
 # ------------------------------------------------------------
-# 美化：把主要內容放入卡片容器
+# Main content
 # ------------------------------------------------------------
 st.markdown('<div class="g-card">', unsafe_allow_html=True)
 
