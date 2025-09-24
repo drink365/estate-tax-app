@@ -354,7 +354,7 @@ def do_login(users: dict):
             }
         )
         _set_active_session(username_l, token, {"ts": int(time.time())})
-        st.success(f"登入成功，歡迎 {info['name']}")
+        st.success(f"登入成功，歡迎😀 {info['name']}")
         st.rerun()
 
 def ensure_auth():
