@@ -233,4 +233,3 @@ def run_cvgift():
     """,
         unsafe_allow_html=True
     )
-
