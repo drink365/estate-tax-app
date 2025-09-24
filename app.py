@@ -89,7 +89,85 @@ def _invalidate_session(username: str):
             _save_store(store)
 
 # --------------------------- Auth via ENV (TOML) ---------------------------
-def _load_users_from_env(env_key: str = "AUTHORIZED_USERS"):
+
+def _load_users(env_key: str = "AUTHORIZED_USERS"):
+    """
+    加強版載入邏輯：
+    1) 優先讀取環境變數 AUTHORIZED_USERS（TOML 字串）
+    2) 若無，再嘗試 st.secrets["AUTHORIZED_USERS"]：可為 TOML 字串或已解析的 dict
+    3) 若還是無，再嘗試 st.secrets 直接含有 [authorized_users.*] 結構（dict）
+    回傳：{ username_lower: {username, password, name, role, start_date, end_date} }
+    """
+    raw = os.environ.get(env_key, "")
+    data = None
+
+    # 1) 環境變數（TOML 字串）
+    if isinstance(raw, str) and raw.strip():
+        try:
+            data = _toml.loads(raw.strip())
+        except Exception as e:
+            st.error("授權設定（AUTHORIZED_USERS）格式錯誤（ENV）。請確認為 TOML。")
+            st.stop()
+
+    # 2) st.secrets["AUTHORIZED_USERS"]
+    if data is None:
+        try:
+            sec = st.secrets.get("AUTHORIZED_USERS", None)
+        except Exception:
+            sec = None
+        if sec:
+            if isinstance(sec, str):
+                try:
+                    data = _toml.loads(sec.strip())
+                except Exception:
+                    st.error("授權設定（AUTHORIZED_USERS）格式錯誤（SECRETS 字串）。請確認為 TOML。")
+                    st.stop()
+            elif isinstance(sec, dict):
+                data = dict(sec)  # 已是 dict 結構
+            else:
+                st.error("授權設定（AUTHORIZED_USERS）於 st.secrets 中格式不支援。")
+                st.stop()
+
+    # 3) 直接於 st.secrets 中的 [authorized_users.*]
+    if data is None:
+        try:
+            maybe = dict(st.secrets)
+            if "authorized_users" in maybe:
+                data = maybe
+        except Exception:
+            pass
+
+    if data is None:
+        return {}
+
+    users = {}
+    today = _dt.date.today()
+    auth = data.get("authorized_users", {})
+    if not isinstance(auth, dict):
+        return {}
+
+    for key, info in auth.items():
+        try:
+            username = str(info["username"]).strip()
+            username_l = username.lower()
+            password = str(info["password"])
+            name = str(info.get("name", username))
+            role = str(info.get("role", "member"))
+            start = _dt.date.fromisoformat(info.get("start_date", "1900-01-01"))
+            end = _dt.date.fromisoformat(info.get("end_date", "2999-12-31"))
+            if start <= today <= end:
+                users[username_l] = {
+                    "username": username,
+                    "password": password,
+                    "name": name,
+                    "role": role,
+                    "start_date": start,
+                    "end_date": end,
+                }
+        except Exception:
+            continue
+    return users
+
     raw = os.environ.get(env_key, "").strip()
     if not raw:
         return {}
@@ -125,6 +203,7 @@ def _load_users_from_env(env_key: str = "AUTHORIZED_USERS"):
     return users
 
 def _check_login(username: str, password: str, users: dict):
+    username = (username or '').strip().lower()
     u = users.get(username)
     if not u:
         return False, None
@@ -155,6 +234,8 @@ def do_login(users: dict):
         st.session_state["user"] = info["name"]
         st.session_state["username"] = info["username"]
         st.session_state["role"] = info.get("role","member")
+        st.session_state["start_date"] = info.get("start_date")
+        st.session_state["end_date"] = info.get("end_date")
         st.session_state["session_token"] = token
 
         meta = {"ts": int(time.time())}
@@ -164,7 +245,7 @@ def do_login(users: dict):
         st.rerun()
 
 def ensure_auth():
-    users = _load_users_from_env()
+    users = _load_users()
     if not st.session_state.get("authed"):
         do_login(users)
         return False
