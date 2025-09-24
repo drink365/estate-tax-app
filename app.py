@@ -17,17 +17,23 @@ from modules.wrapped_cvgift import run_cvgift
 
 st.set_page_config(page_title="《影響力》傳承策略平台 | 整合版", layout="wide")
 
+# --------------------------- Config ---------------------------
+SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
+SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))  # 30 分鐘無操作即過期
+ALLOW_TAKEOVER = True  # 允許「搶下使用權」以登出其它裝置
+
+# --------------------------- 授權診斷（可選） ---------------------------
 def _auth_debug_panel(users: dict, place: str = "sidebar"):
     if os.environ.get("AUTH_DEBUG", "0") != "1":
         return
     panel = st.sidebar if place == "sidebar" else st
-    with panel.expander("🔧 授權診斷（僅部署環境變數 AUTH_DEBUG=1 時可見）", expanded=False):
+    with panel.expander("🔧 授權診斷（僅在 AUTH_DEBUG=1 時顯示）", expanded=False):
         if not users:
             st.warning("目前未載入到任何使用者。請檢查 AUTHORIZED_USERS 設定。")
         else:
-            data_rows = []
+            rows = []
             for k, v in users.items():
-                data_rows.append({
+                rows.append({
                     "username_key": k,
                     "username": v.get("username"),
                     "name": v.get("name"),
@@ -35,13 +41,7 @@ def _auth_debug_panel(users: dict, place: str = "sidebar"):
                     "start_date": v.get("start_date"),
                     "end_date": v.get("end_date"),
                 })
-            st.dataframe(data_rows, use_container_width=True)
-
-
-# --------------------------- Config ---------------------------
-SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
-SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))  # 30 分鐘無操作即過期
-ALLOW_TAKEOVER = True  # 允許「搶下使用權」以登出其它裝置
+            st.dataframe(rows, use_container_width=True)
 
 # --------------------------- Session Store ---------------------------
 _store_lock = threading.Lock()
@@ -74,26 +74,26 @@ def _cleanup_store(store: dict):
     if changed:
         _save_store(store)
 
-def _set_active_session(username: str, token: str, meta: dict):
+def _set_active_session(username_l: str, token: str, meta: dict):
     with _store_lock:
         store = _load_store()
-        store[username] = {
+        store[username_l] = {
             "token": token,
             "last_seen": int(time.time()),
             "meta": meta,
         }
         _save_store(store)
 
-def _get_active_session(username: str):
+def _get_active_session(username_l: str):
     with _store_lock:
         store = _load_store()
         _cleanup_store(store)
-        return store.get(username)
+        return store.get(username_l)
 
-def _refresh_active_session(username: str, token: str):
+def _refresh_active_session(username_l: str, token: str):
     with _store_lock:
         store = _load_store()
-        sess = store.get(username)
+        sess = store.get(username_l)
         if not sess:
             return False
         if sess.get("token") != token:
@@ -102,31 +102,30 @@ def _refresh_active_session(username: str, token: str):
         _save_store(store)
         return True
 
-def _invalidate_session(username: str):
+def _invalidate_session(username_l: str):
     with _store_lock:
         store = _load_store()
-        if username in store:
-            store.pop(username)
+        if username_l in store:
+            store.pop(username_l)
             _save_store(store)
 
-# --------------------------- Auth via ENV (TOML) ---------------------------
-
+# --------------------------- Auth Loader（ENV / SECRETS） ---------------------------
 def _load_users(env_key: str = "AUTHORIZED_USERS"):
     """
-    加強版載入邏輯：
-    1) 優先讀取環境變數 AUTHORIZED_USERS（TOML 字串）
-    2) 若無，再嘗試 st.secrets["AUTHORIZED_USERS"]：可為 TOML 字串或已解析的 dict
-    3) 若還是無，再嘗試 st.secrets 直接含有 [authorized_users.*] 結構（dict）
-    回傳：{ username_lower: {username, password, name, role, start_date, end_date} }
+    讀取授權使用者：
+    1) 環境變數 AUTHORIZED_USERS（TOML 字串）
+    2) st.secrets["AUTHORIZED_USERS"]（TOML 字串或 dict）
+    3) st.secrets 根層含 authorized_users 字典
+    回傳：{ username_lower: {...} }
     """
     raw = os.environ.get(env_key, "")
     data = None
 
-    # 1) 環境變數（TOML 字串）
+    # 1) ENV：TOML 字串
     if isinstance(raw, str) and raw.strip():
         try:
             data = _toml.loads(raw.strip())
-        except Exception as e:
+        except Exception:
             st.error("授權設定（AUTHORIZED_USERS）格式錯誤（ENV）。請確認為 TOML。")
             st.stop()
 
@@ -141,15 +140,15 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
                 try:
                     data = _toml.loads(sec.strip())
                 except Exception:
-                    st.error("授權設定（AUTHORIZED_USERS）格式錯誤（SECRETS 字串）。請確認為 TOML。")
+                    st.error("授權設定（AUTHORIZED_USERS）格式錯誤（SECRETS 字串）。")
                     st.stop()
             elif isinstance(sec, dict):
-                data = dict(sec)  # 已是 dict 結構
+                data = dict(sec)
             else:
                 st.error("授權設定（AUTHORIZED_USERS）於 st.secrets 中格式不支援。")
                 st.stop()
 
-    # 3) 直接於 st.secrets 中的 [authorized_users.*]
+    # 3) 根層含 authorized_users
     if data is None:
         try:
             maybe = dict(st.secrets)
@@ -167,7 +166,7 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
     if not isinstance(auth, dict):
         return {}
 
-    for key, info in auth.items():
+    for _key, info in auth.items():
         try:
             username = str(info["username"]).strip()
             username_l = username.lower()
@@ -189,42 +188,8 @@ def _load_users(env_key: str = "AUTHORIZED_USERS"):
             continue
     return users
 
-    raw = os.environ.get(env_key, "").strip()
-    if not raw:
-        return {}
-    try:
-        data = _toml.loads(raw)
-    except Exception as e:
-        st.error("授權設定（AUTHORIZED_USERS）格式錯誤，請確認為 TOML。")
-        st.stop()
-    users = {}
-    today = _dt.date.today()
-    auth = data.get("authorized_users", {})
-    if not isinstance(auth, dict):
-        return {}
-    for key, info in auth.items():
-        try:
-            username = str(info["username"]).strip()
-            password = str(info["password"])
-            name = str(info.get("name", username))
-            start = _dt.date.fromisoformat(info.get("start_date", "1900-01-01"))
-            end = _dt.date.fromisoformat(info.get("end_date", "2999-12-31"))
-            role = str(info.get("role", "member"))
-            if start <= today <= end:
-                users[username] = {
-                    "username": username,
-                    "password": password,
-                    "name": name,
-                    "role": role,
-                    "start_date": start,
-                    "end_date": end,
-                }
-        except Exception:
-            continue
-    return users
-
 def _check_login(username: str, password: str, users: dict):
-    username = (username or '').strip().lower()
+    username = (username or "").strip().lower()
     u = users.get(username)
     if not u:
         return False, None
@@ -232,8 +197,10 @@ def _check_login(username: str, password: str, users: dict):
         return False, None
     return True, u
 
+# --------------------------- Login Flow ---------------------------
 def do_login(users: dict):
     _auth_debug_panel(users, place='main')
+
     st.markdown("### 會員登入")
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("帳號", value="", autocomplete="username")
@@ -246,7 +213,8 @@ def do_login(users: dict):
             st.error("帳號或密碼錯誤，或帳號已過期")
             return
 
-        active = _get_active_session(username)
+        username_l = info["username"].strip().lower()
+        active = _get_active_session(username_l)
         if active and not takeover:
             st.warning("此帳號目前已在其他裝置使用，若要登入請勾選『允許我搶下使用權』。")
             return
@@ -254,14 +222,15 @@ def do_login(users: dict):
         token = secrets.token_urlsafe(24)
         st.session_state["authed"] = True
         st.session_state["user"] = info["name"]
-        st.session_state["username"] = info["username"]
+        st.session_state["username"] = info["username"]           # 原始大小寫
+        st.session_state["username_l"] = username_l               # 小寫供會話管理
         st.session_state["role"] = info.get("role","member")
         st.session_state["start_date"] = info.get("start_date")
         st.session_state["end_date"] = info.get("end_date")
         st.session_state["session_token"] = token
 
         meta = {"ts": int(time.time())}
-        _set_active_session(info["username"], token, meta)
+        _set_active_session(username_l, token, meta)
 
         st.success(f"登入成功，歡迎 {info['name']}")
         st.rerun()
@@ -272,8 +241,7 @@ def ensure_auth():
         do_login(users)
         return False
 
-    user = st.session_state.get("username", "")
-    user_l = (user or "").strip().lower()
+    user_l = (st.session_state.get("username_l", "") or "").strip().lower()
     token = st.session_state.get("session_token", "")
     if not user_l or not token:
         st.session_state.clear()
@@ -281,6 +249,7 @@ def ensure_auth():
         return False
 
     active = _get_active_session(user_l)
+    _auth_debug_panel(users, place='sidebar')
     if not active or active.get("token") != token:
         st.warning("此帳號已在其他裝置登入，您已被登出。")
         st.session_state.clear()
@@ -302,25 +271,33 @@ with brand_col2:
     st.caption("專業 × 溫度 × 智能｜Estate Tax Simulator + 保單贈與規劃")
 
 st.divider()
-# --------------------------- 顯示登入資訊（右上角） ---------------------------
-with st.container():
-    col1, col2 = st.columns([8,2])
-    with col2:
-        exp_date = st.session_state.get("end_date")
-        exp_str = exp_date.strftime("%Y-%m-%d") if exp_date else "N/A"
-        st.caption(f"歡迎，{st.session_state.get('user','')}｜有效期限至 {exp_str}")
+
+# 右上角（其實是同一行靠左）：歡迎｜有效期限｜登出（單行顯示）
+if ensure_auth():
+    exp_date = st.session_state.get("end_date")
+    exp_str = exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, _dt.date) else "N/A"
+    name = st.session_state.get("user", "")
+
+    # 建立三欄，前兩欄放資訊與按鈕，第三欄空白用來保持「靠左單行」
+    bar_col1, bar_col2, _ = st.columns([8, 1.5, 10])
+    with bar_col1:
+        st.markdown(
+            f"""
+            <div style="display:flex;align-items:center;gap:0.75rem;font-size:0.9rem;color:#6b7280;">
+                <span>歡迎，{name}｜有效期限至 {exp_str}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with bar_col2:
         if st.button("登出", key="top_logout", use_container_width=True):
             try:
-                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
+                _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
             except Exception:
                 pass
             st.session_state.clear()
             st.rerun()
-
-
-_auth_debug_panel(_load_users(), place='sidebar')
-
-if not ensure_auth():
+else:
     st.stop()
 
 # Sidebar Navigation
@@ -336,23 +313,16 @@ st.sidebar.markdown("---")
 st.sidebar.write("付費會員限定功能")
 with st.sidebar.expander("帳號管理", expanded=False):
     st.write(f"目前帳號：**{st.session_state.get('user','')}**（角色：{st.session_state.get('role','member')}）")
-    st.caption(f"會話將在無操作 {int(os.environ.get('SESSION_TTL_SECONDS','1800'))//60} 分鐘後自動過期")
+    st.caption(f"會話將在無操作 {SESSION_TTL_SECONDS//60} 分鐘後自動過期")
     colA, colB = st.columns(2)
     with colA:
         if st.button("強制登出此帳號的其他裝置", use_container_width=True):
-            # 清除此用戶所有活躍會話（踢掉別處）
-            try:
-                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
-            except Exception:
-                pass
+            _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
             st.success("已登出其他裝置。")
             st.rerun()
     with colB:
         if st.button("登出", type="secondary", use_container_width=True):
-            try:
-                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
-            except Exception:
-                pass
+            _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
             st.session_state.clear()
             st.rerun()
 
