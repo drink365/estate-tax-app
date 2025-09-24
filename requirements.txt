@@ -1,5 +1,2 @@
-streamlit
-pandas
-numpy
-matplotlib
-plotly
+streamlit>=1.36.0
+tomli>=2.0.1
