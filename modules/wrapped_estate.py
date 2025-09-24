@@ -3,8 +3,6 @@ import pandas as pd
 import math
 import plotly.express as px
 from typing import Tuple, List
-from datetime import datetime
-import time
 from dataclasses import dataclass, field
 
 
@@ -125,38 +123,29 @@ class EstateTaxUI:
         claim_case = st.number_input("保險理賠金（萬）", min_value=0, max_value=100000, value=int(premium_case * 1.5), step=100)
         gift_case = st.number_input("提前贈與金額（萬）", min_value=0, max_value=CASE_TOTAL_ASSETS - premium_case, value=244, step=100)
 
+        # ---------------- 五種情境 ----------------
         # 沒有規劃
-        _, tax_case_no_plan, _ = self.calculator.calculate_estate_tax(
-            CASE_TOTAL_ASSETS, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
-        )
+        _, tax_case_no_plan, _ = self.calculator.calculate_estate_tax(CASE_TOTAL_ASSETS, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS)
         net_case_no_plan = CASE_TOTAL_ASSETS - tax_case_no_plan
 
         # 提前贈與
         effective_case_gift = CASE_TOTAL_ASSETS - gift_case
-        _, tax_case_gift, _ = self.calculator.calculate_estate_tax(
-            effective_case_gift, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
-        )
+        _, tax_case_gift, _ = self.calculator.calculate_estate_tax(effective_case_gift, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS)
         net_case_gift = effective_case_gift - tax_case_gift + gift_case
 
         # 購買保險
         effective_case_insurance = CASE_TOTAL_ASSETS - premium_case
-        _, tax_case_insurance, _ = self.calculator.calculate_estate_tax(
-            effective_case_insurance, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
-        )
+        _, tax_case_insurance, _ = self.calculator.calculate_estate_tax(effective_case_insurance, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS)
         net_case_insurance = effective_case_insurance - tax_case_insurance + claim_case
 
         # 贈與 + 保險（未被課稅）
         effective_case_combo_not_tax = CASE_TOTAL_ASSETS - gift_case - premium_case
-        _, tax_case_combo_not_tax, _ = self.calculator.calculate_estate_tax(
-            effective_case_combo_not_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
-        )
+        _, tax_case_combo_not_tax, _ = self.calculator.calculate_estate_tax(effective_case_combo_not_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS)
         net_case_combo_not_tax = effective_case_combo_not_tax - tax_case_combo_not_tax + claim_case + gift_case
 
         # 贈與 + 保險（被實質課稅）
         effective_case_combo_tax = CASE_TOTAL_ASSETS - gift_case - premium_case + claim_case
-        _, tax_case_combo_tax, _ = self.calculator.calculate_estate_tax(
-            effective_case_combo_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS
-        )
+        _, tax_case_combo_tax, _ = self.calculator.calculate_estate_tax(effective_case_combo_tax, CASE_SPOUSE, CASE_ADULT_CHILDREN, CASE_OTHER, CASE_DISABLED, CASE_PARENTS)
         net_case_combo_tax = effective_case_combo_tax - tax_case_combo_tax + gift_case
 
         # ---------------- 結果表格 ----------------
@@ -189,6 +178,10 @@ class EstateTaxUI:
 
         st.table(df_case_results)
 
+        # ---------------- CSV 下載 ----------------
+        csv = df_case_results.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("下載試算結果 CSV", csv, "estate_simulation.csv", "text/csv", key="download-csv")
+
         # ---------------- 視覺化 ----------------
         fig_bar_case = px.bar(
             df_case_results,
@@ -198,6 +191,21 @@ class EstateTaxUI:
             text="家人總共取得（萬）"
         )
         fig_bar_case.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+
+        # 顯示白色文字的「規劃效益」
+        baseline_case = baseline_value
+        for idx, row in df_case_results.iterrows():
+            if row["規劃策略"] != "沒有規劃":
+                diff = row["家人總共取得（萬）"] - baseline_case
+                diff_text = f"+{int(diff)}" if diff >= 0 else f"{int(diff)}"
+                fig_bar_case.add_annotation(
+                    x=row["規劃策略"],
+                    y=row["家人總共取得（萬）"] / 2,
+                    text=diff_text,
+                    showarrow=False,
+                    font=dict(color="white", size=16)
+                )
+
         st.plotly_chart(fig_bar_case, use_container_width=True)
 
 
