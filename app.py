@@ -30,7 +30,6 @@ st.set_page_config(
 # ------------------------------------------------------------
 SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
-ALLOW_TAKEOVER = True
 LOGO_CSS_HEIGHT = int(os.environ.get("LOGO_CSS_HEIGHT", "56"))  # 頁首 logo 高度
 
 # ------------------------------------------------------------
@@ -44,17 +43,17 @@ st.markdown(
   --brand-600:#be123c;
   --ink:#1f2937;
   --muted:#6b7280;
-  --card-bg:#ffffffcc;
+  --card-bg:#ffffffcc;  /* 半透明白 */
   --card-bd:#e5e7eb;
 }
 
-/* 隱藏 Streamlit 頂部工具列/標頭/選單/頁尾 */
+/* 隱藏 Streamlit 頂部工具列/標頭/選單/頁尾，避免擋標題 */
 [data-testid="stToolbar"] { visibility: hidden; height: 0; position: fixed; }
 header { visibility: hidden; height: 0; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
-/* 背景 */
+/* 背景與整體間距 */
 .stApp {
   background:
     radial-gradient(1200px 600px at -10% -20%, rgba(255,228,230,0.30), transparent 60%),
@@ -64,25 +63,31 @@ footer { visibility: hidden; }
 }
 .block-container{ padding-top: .5rem; max-width: 1200px; }
 
-/* 標題 */
+/* 標題與 Logo */
 h1,h2,.stTitle{ margin:.2rem 0 !important; }
 h2{ color:var(--ink) !important; }
-
-/* Logo */
 .header-logo{
-  height: 56px;
+  height: """ + str(LOGO_CSS_HEIGHT) + """px;
   width:auto; display:block;
   image-rendering:-webkit-optimize-contrast;
   image-rendering:optimizeQuality;
 }
 
-/* 分隔線 */
+/* 細分隔線（品牌色） */
 .hr-thin{
   height:1px; background:linear-gradient(90deg, var(--brand), transparent);
   border:0; margin:.75rem 0 1rem 0;
 }
 
-/* Tabs */
+/* Tabs：把卡片樣式直接套在 tabs 容器，避免外層空框 */
+.stTabs {
+  background:var(--card-bg);
+  backdrop-filter:saturate(160%) blur(2px);
+  border:1px solid var(--card-bd);
+  border-radius:16px;
+  padding:.4rem .6rem;
+  box-shadow:0 6px 20px rgba(0,0,0,.06);
+}
 .stTabs [role="tablist"]{ gap:2rem; }
 .stTabs [role="tab"]{
   font-size:1.06rem; padding:.6rem .25rem; color:var(--muted);
@@ -93,17 +98,7 @@ h2{ color:var(--ink) !important; }
   font-weight:700;
 }
 
-/* 卡片 */
-.g-card{
-  background:var(--card-bg);
-  backdrop-filter:saturate(160%) blur(2px);
-  border:1px solid var(--card-bd);
-  border-radius:16px;
-  padding:1.25rem 1.25rem;
-  box-shadow:0 6px 20px rgba(0,0,0,.06);
-}
-
-/* 登出按鈕：簡潔版，移除圓角＋陰影 */
+/* 登出按鈕：簡潔低調 */
 .logout-btn>button{
   border-radius:4px !important;
   padding:.4rem .9rem !important;
@@ -120,7 +115,7 @@ h2{ color:var(--ink) !important; }
 /* 頂部資訊列 */
 .topbar{ display:flex; align-items:center; gap:.75rem; font-size:.95rem; color:var(--muted); }
 
-/* Plotly 標籤白色 */
+/* Plotly：柱內資料標籤＋註解（效益文字）一律白色 */
 .js-plotly-plot .bartext{ fill:#ffffff !important; }
 .js-plotly-plot g.annotation text{ fill:#ffffff !important; }
 </style>
@@ -129,7 +124,7 @@ h2{ color:var(--ink) !important; }
 )
 
 # ------------------------------------------------------------
-# Helpers：圖片 data URI
+# Helpers：圖片 data URI（支援 SVG / @2x）
 # ------------------------------------------------------------
 def _data_uri_from_file(path: str, mime: str) -> str | None:
     try:
@@ -159,7 +154,7 @@ def _render_header_logo():
     st.write("")
 
 # ------------------------------------------------------------
-# Session store helpers
+# 簡易會話鎖（單一登入 + 逾時）
 # ------------------------------------------------------------
 _store_lock = threading.Lock()
 
@@ -219,7 +214,7 @@ def _invalidate_session(username_l: str):
             _save_store(store)
 
 # ------------------------------------------------------------
-# Load users
+# 授權載入（ENV / secrets, TOML）
 # ------------------------------------------------------------
 def _load_users(env_key: str = "AUTHORIZED_USERS"):
     raw = os.environ.get(env_key, "")
@@ -374,21 +369,23 @@ if ensure_auth():
     with info_col1:
         st.markdown(f"<div class='topbar'>歡迎 😀，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
     with info_col2:
-        if st.button("登出", key="top_logout", use_container_width=True, type="secondary"):
-            try:
-                _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
-            except Exception:
-                pass
-            st.session_state.clear()
-            st.rerun()
+        # 低調按鈕：加 class 包起來以套用簡潔樣式
+        with st.container():
+            st.markdown("<div class='logout-btn'>", unsafe_allow_html=True)
+            if st.button("登出", key="top_logout", use_container_width=True, type="secondary"):
+                try:
+                    _invalidate_session((st.session_state.get("username_l","") or "").strip().lower())
+                except Exception:
+                    pass
+                st.session_state.clear()
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 else:
     st.stop()
 
 # ------------------------------------------------------------
-# Main content
+# Tabs（已把卡片樣式套在 .stTabs 上，無外層 div，故不會出現空的圓角框）
 # ------------------------------------------------------------
-st.markdown('<div class="g-card">', unsafe_allow_html=True)
-
 tabs = st.tabs(["🏛️ 遺產稅試算（AI秒算遺產稅）", "🎁 保單贈與規劃（CVGift）"])
 
 with tabs[0]:
@@ -402,8 +399,6 @@ with tabs[1]:
         run_cvgift()
     except Exception as e:
         st.error(f"載入保單贈與模組時發生錯誤：{e}")
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Footer
