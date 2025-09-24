@@ -19,7 +19,7 @@ st.set_page_config(page_title="《影響力》傳承策略平台 | 整合版", l
 
 # --------------------------- Config ---------------------------
 SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
-SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))  # 30 分鐘無操作即過期
+SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 預設 60 分鐘無操作即過期
 ALLOW_TAKEOVER = True  # 允許「搶下使用權」以登出其它裝置
 
 # --------------------------- 授權診斷（可選） ---------------------------
@@ -278,7 +278,6 @@ if ensure_auth():
     exp_str = exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, _dt.date) else "N/A"
     name = st.session_state.get("user", "")
 
-    # 建立三欄，前兩欄放資訊與按鈕，第三欄空白用來保持「靠左單行」
     bar_col1, bar_col2, _ = st.columns([8, 1.5, 10])
     with bar_col1:
         st.markdown(
@@ -326,12 +325,19 @@ with st.sidebar.expander("帳號管理", expanded=False):
             st.session_state.clear()
             st.rerun()
 
-# Route to chosen module
+# --------------------------- Routing ---------------------------
 if page.startswith("🏛️"):
-    run_estate()
+    st.markdown("#### 遺產稅試算")
+    try:
+        run_estate()
+    except Exception as e:
+        st.error(f"載入遺產稅模組時發生錯誤：{e}")
 elif page.startswith("🎁"):
     st.markdown("#### 保單贈與規劃")
-    run_cvgift()
+    try:
+        run_cvgift()
+    except Exception as e:
+        st.error(f"載入保單贈與模組時發生錯誤：{e}")
 else:
     st.info("請從左側選單選擇功能")
 
