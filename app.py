@@ -17,6 +17,27 @@ from modules.wrapped_cvgift import run_cvgift
 
 st.set_page_config(page_title="《影響力》傳承策略平台 | 整合版", layout="wide")
 
+def _auth_debug_panel(users: dict, place: str = "sidebar"):
+    if os.environ.get("AUTH_DEBUG", "0") != "1":
+        return
+    panel = st.sidebar if place == "sidebar" else st
+    with panel.expander("🔧 授權診斷（僅部署環境變數 AUTH_DEBUG=1 時可見）", expanded=False):
+        if not users:
+            st.warning("目前未載入到任何使用者。請檢查 AUTHORIZED_USERS 設定。")
+        else:
+            data_rows = []
+            for k, v in users.items():
+                data_rows.append({
+                    "username_key": k,
+                    "username": v.get("username"),
+                    "name": v.get("name"),
+                    "role": v.get("role"),
+                    "start_date": v.get("start_date"),
+                    "end_date": v.get("end_date"),
+                })
+            st.dataframe(data_rows, use_container_width=True)
+
+
 # --------------------------- Config ---------------------------
 SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))  # 30 分鐘無操作即過期
@@ -212,6 +233,7 @@ def _check_login(username: str, password: str, users: dict):
     return True, u
 
 def do_login(users: dict):
+    _auth_debug_panel(users, place='main')
     st.markdown("### 會員登入")
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("帳號", value="", autocomplete="username")
@@ -251,20 +273,21 @@ def ensure_auth():
         return False
 
     user = st.session_state.get("username", "")
+    user_l = (user or "").strip().lower()
     token = st.session_state.get("session_token", "")
-    if not user or not token:
+    if not user_l or not token:
         st.session_state.clear()
         do_login(users)
         return False
 
-    active = _get_active_session(user)
+    active = _get_active_session(user_l)
     if not active or active.get("token") != token:
         st.warning("此帳號已在其他裝置登入，您已被登出。")
         st.session_state.clear()
         do_login(users)
         return False
 
-    _refresh_active_session(user, token)
+    _refresh_active_session(user_l, token)
     return True
 
 # --------------------------- UI ---------------------------
@@ -288,12 +311,14 @@ with st.container():
         st.caption(f"歡迎，{st.session_state.get('user','')}｜有效期限至 {exp_str}")
         if st.button("登出", key="top_logout", use_container_width=True):
             try:
-                _invalidate_session(st.session_state.get("username",""))
+                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
             except Exception:
                 pass
             st.session_state.clear()
             st.rerun()
 
+
+_auth_debug_panel(_load_users(), place='sidebar')
 
 if not ensure_auth():
     st.stop()
@@ -317,7 +342,7 @@ with st.sidebar.expander("帳號管理", expanded=False):
         if st.button("強制登出此帳號的其他裝置", use_container_width=True):
             # 清除此用戶所有活躍會話（踢掉別處）
             try:
-                _invalidate_session(st.session_state.get("username",""))
+                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
             except Exception:
                 pass
             st.success("已登出其他裝置。")
@@ -325,7 +350,7 @@ with st.sidebar.expander("帳號管理", expanded=False):
     with colB:
         if st.button("登出", type="secondary", use_container_width=True):
             try:
-                _invalidate_session(st.session_state.get("username",""))
+                _invalidate_session(((st.session_state.get("username","") or "").strip().lower() or "").strip().lower())
             except Exception:
                 pass
             st.session_state.clear()
