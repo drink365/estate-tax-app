@@ -1,5 +1,4 @@
 # modules/wrapped_estate.py
-# －－－「遺產稅試算」功能頁 －－－
 from __future__ import annotations
 
 import math
@@ -17,13 +16,13 @@ import streamlit as st
 @dataclass
 class TaxConstants:
     """遺產稅相關常數（單位：萬）"""
-    EXEMPT_AMOUNT: float = 1333     # 免稅額
-    FUNERAL_EXPENSE: float = 138    # 喪葬費扣除額
-    SPOUSE_DEDUCTION_VALUE: float = 553  # 配偶扣除額
-    ADULT_CHILD_DEDUCTION: float = 56    # 每位子女扣除額
-    PARENTS_DEDUCTION: float = 138       # 父母扣除額
-    DISABLED_DEDUCTION: float = 693      # 重度身心障礙扣除額
-    OTHER_DEPENDENTS_DEDUCTION: float = 56  # 其他撫養扣除額
+    EXEMPT_AMOUNT: float = 1333
+    FUNERAL_EXPENSE: float = 138
+    SPOUSE_DEDUCTION_VALUE: float = 553
+    ADULT_CHILD_DEDUCTION: float = 56
+    PARENTS_DEDUCTION: float = 138
+    DISABLED_DEDUCTION: float = 693
+    OTHER_DEPENDENTS_DEDUCTION: float = 56
     TAX_BRACKETS: List[Tuple[float, float]] = field(
         default_factory=lambda: [
             (5621, 0.10),
@@ -33,22 +32,13 @@ class TaxConstants:
     )
 
 
-# ===============================
-# 2. 稅務計算邏輯
-# ===============================
 class EstateTaxCalculator:
-    """遺產稅計算器（單位：萬）"""
-
     def __init__(self, constants: TaxConstants):
         self.constants = constants
 
     def compute_deductions(
-        self,
-        spouse: bool,
-        adult_children: int,
-        other_dependents: int,
-        disabled_people: int,
-        parents: int,
+        self, spouse: bool, adult_children: int, other_dependents: int,
+        disabled_people: int, parents: int
     ) -> float:
         spouse_ded = self.constants.SPOUSE_DEDUCTION_VALUE if spouse else 0
         total = (
@@ -63,15 +53,9 @@ class EstateTaxCalculator:
 
     @st.cache_data(show_spinner=False)
     def calculate_estate_tax(
-        _self,
-        total_assets: float,
-        spouse: bool,
-        adult_children: int,
-        other_dependents: int,
-        disabled_people: int,
-        parents: int,
+        _self, total_assets: float, spouse: bool, adult_children: int,
+        other_dependents: int, disabled_people: int, parents: int
     ) -> Tuple[float, float, float]:
-        """回傳：(課稅遺產淨額, 預估遺產稅, 總扣除額) ；單位：萬"""
         deductions = _self.compute_deductions(
             spouse, adult_children, other_dependents, disabled_people, parents
         )
@@ -90,19 +74,15 @@ class EstateTaxCalculator:
         return float(taxable), round(tax_due, 0), float(deductions)
 
 
-# ===============================
-# 3. 模擬試算邏輯
-# ===============================
 class EstateTaxSimulator:
-    """遺產稅模擬試算器（單位：萬）"""
-
     def __init__(self, calculator: EstateTaxCalculator):
         self.calculator = calculator
 
-    def simulate(self, total_assets: float, spouse: bool, adult_children: int,
-                 other_dependents: int, disabled_people: int, parents: int,
-                 premium: float, claim_amount: float, gift_amount: float) -> pd.DataFrame:
-        """產生各策略對照表（萬）"""
+    def simulate(
+        self, total_assets: float, spouse: bool, adult_children: int,
+        other_dependents: int, disabled_people: int, parents: int,
+        premium: float, claim_amount: float, gift_amount: float
+    ) -> pd.DataFrame:
         # baseline
         _, tax_base, _ = self.calculator.calculate_estate_tax(
             total_assets, spouse, adult_children, other_dependents, disabled_people, parents
@@ -148,18 +128,16 @@ class EstateTaxSimulator:
             "家人總共取得（萬）": [
                 int(net_base), int(net_gift), int(net_ins), int(net_combo), int(net_combo_taxed)
             ],
-            "遺產稅（萬）": [int(tax_base), int(tax_gift), int(tax_ins), int(tax_combo), int(tax_combo_taxed)]
+            "遺產稅（萬）": [
+                int(tax_base), int(tax_gift), int(tax_ins), int(tax_combo), int(tax_combo_taxed)
+            ]
         })
         base_value = df.loc[df["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
         df["規劃效益（相較無規劃）"] = df["家人總共取得（萬）"] - base_value
         return df
 
 
-# ===============================
-# 4. 功能頁入口
-# ===============================
 def run_estate():
-    # 單一主標題（由 app.py 的 CSS 統一樣式）
     st.markdown("<h2 class='page-title'>遺產稅試算</h2>", unsafe_allow_html=True)
 
     constants = TaxConstants()
@@ -192,7 +170,7 @@ def run_estate():
     st.markdown("---")
     st.markdown(f"### 預估遺產稅：**{int(tax_due):,} 萬**（課稅遺產淨額：{int(taxable_amount):,} 萬）")
 
-    # 三個概覽表
+    # 概覽表
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("**資產概況**")
@@ -224,26 +202,25 @@ def run_estate():
     st.markdown("---")
     st.markdown("### 策略模擬（僅供討論用）")
 
-    # 以「遺產稅估算結果」推建議預設值
     default_premium = max(0, int(math.ceil(tax_due / 10) * 10))
     default_claim = int(default_premium * 1.5)
-    default_gift = min(244, max(0, total_assets - default_premium))  # 244 萬/年
+    default_gift = min(244, max(0, total_assets - default_premium))
 
     colx, coly, colz = st.columns(3)
     with colx:
-        premium = st.number_input("購買保險保費（萬）", min_value=0, max_value=total_assets, value=default_premium, step=100)
+        premium = st.number_input("購買保險保費（萬）", min_value=0, max_value=total_assets,
+                                  value=default_premium, step=100)
     with coly:
-        claim = st.number_input("保險理賠金（萬）", min_value=0, max_value=100000, value=default_claim, step=100)
+        claim = st.number_input("保險理賠金（萬）", min_value=0, max_value=100000,
+                                value=default_claim, step=100)
     with colz:
         gift = st.number_input("提前贈與金額（萬）", min_value=0, max_value=max(0, total_assets - premium),
-                              value=min(default_gift, max(0, total_assets - premium)), step=50)
+                               value=min(default_gift, max(0, total_assets - premium)), step=50)
 
     if premium > total_assets:
-        st.error("保費不可高於總資產")
-        return
+        st.error("保費不可高於總資產"); return
     if gift > total_assets - premium:
-        st.error("提前贈與不可高於【總資產 - 保費】")
-        return
+        st.error("提前贈與不可高於【總資產 - 保費】"); return
 
     df = sim.simulate(
         total_assets=total_assets,
@@ -259,20 +236,17 @@ def run_estate():
 
     st.table(df)
 
-    # 視覺化：家人總共取得（白色數字由全域 CSS 控制）
     fig = px.bar(df, x="規劃策略", y="家人總共取得（萬）", text="家人總共取得（萬）",
                  title="不同策略下家人總共取得（萬）")
     fig.update_traces(textposition="outside")
-    # 保險：再保險註解（相對值）
     base_val = df.loc[df["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         if row["規劃策略"] != "沒有規劃":
             diff = int(row["家人總共取得（萬）"] - base_val)
             fig.add_annotation(x=row["規劃策略"], y=max(row["家人總共取得（萬）"] * 0.5, 1),
                                text=f"+{diff}" if diff >= 0 else f"{diff}",
                                showarrow=False)
-
     fig.update_layout(margin=dict(t=80, b=50), height=520)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.caption("＊以上為示意估算，實際課稅以主管機關及個案條件為準。")
