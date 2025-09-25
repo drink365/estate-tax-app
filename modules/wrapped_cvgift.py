@@ -1,139 +1,106 @@
-# modules/wrapped_cvgift.py
-from __future__ import annotations
-
-import pandas as pd
-import plotly.express as px
 import streamlit as st
+import pandas as pd
+import math
+import plotly.express as px
 
-GIFT_EXEMPT_YEARLY = 2_440_000
-GIFT_BRACKETS = [
-    (28_110_000, 0.10),
-    (56_210_000, 0.15),
-    (float("inf"), 0.20),
-]
+ANNUAL_GIFT_EXEMPTION = 244  # 每人每年免稅額（萬）。示意用途
+# 示意用贈與稅級距（萬）：同遺/贈三級 10% / 15% / 20%
+GIFT_BRACKETS = [(5621, 0.10), (11242, 0.15), (float("inf"), 0.20)]
 
-
-def gift_tax(net_amount: int) -> int:
-    if net_amount <= 0:
+def _gift_tax(amount: float) -> int:
+    """示意用贈與稅：用三階級（萬）"""
+    if amount <= 0:
         return 0
     tax = 0.0
     prev = 0.0
-    for bound, rate in GIFT_BRACKETS:
-        if net_amount > prev:
-            taxed = min(net_amount, bound) - prev
+    for up, rate in GIFT_BRACKETS:
+        if amount > prev:
+            taxed = min(amount, up) - prev
             tax += taxed * rate
-            prev = bound
-    return int(round(tax))
-
-
-def summarize_plan(annual_premium: int, change_year: int, cv_map: dict) -> dict:
-    gift_amount = int(cv_map.get(change_year, 0))
-    net = max(0, gift_amount - GIFT_EXEMPT_YEARLY)
-    tax = gift_tax(net)
-    total_premium_paid = int(annual_premium * change_year)
-
-    df = pd.DataFrame(
-        [
-            ["變更年度", change_year, ""],
-            ["贈與金額（以年末現金價值）", f"{gift_amount:,}", "元"],
-            ["年免稅額", f"{GIFT_EXEMPT_YEARLY:,}", "元"],
-            ["贈與淨額", f"{net:,}", "元"],
-            ["估算贈與稅", f"{tax:,}", "元"],
-            ["變更前累計保費", f"{total_premium_paid:,}", "元"],
-        ],
-        columns=["項目", "數值", "單位"],
-    )
-    return {
-        "gift_amount": gift_amount,
-        "net_amount": net,
-        "gift_tax": tax,
-        "total_premium_paid": total_premium_paid,
-        "table": df,
-    }
-
-
-def _benefit_cards():
-    st.markdown("### 8 大好處（用同樣現金流，更聰明完成贈與）")
-    cols = st.columns(4)
-    items = [
-        ("💡 明確目的", "以『變更要保人』實現提前贈與。"),
-        ("🧾 稅負可預期", "按淨額10/15/20%分級，稅源可事前準備。"),
-        ("💸 現金流不變", "維持原本年繳保費，流程簡單。"),
-        ("🧑‍🤝‍🧑 受益保障", "指定受益人，資金歸屬清楚。"),
-        ("🧱 資產隔離", "保單具保全、抗風險特性。"),
-        ("🧭 彈性安排", "可選擇最佳變更年度與金額。"),
-        ("📈 淨移轉提升", "多年度分批，總淨移轉金額更高。"),
-        ("📑 留痕可驗", "契約/保單文件留痕，合規易檢。"),
-    ]
-    for i, (title, desc) in enumerate(items):
-        with cols[i % 4]:
-            st.markdown(
-                f"""
-                <div style="border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px;background:#fff;">
-                  <div style="font-weight:700;margin-bottom:6px;">{title}</div>
-                  <div style="color:#6b7280;font-size:0.95rem;">{desc}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
+            prev = up
+        else:
+            break
+    return int(round(tax, 0))
 
 def run_cvgift():
-    st.markdown("<h2 class='page-title'>保單贈與規劃</h2>", unsafe_allow_html=True)
+    st.markdown("## 保單贈與規劃")
 
-    st.markdown(
-        "以『**變更要保人**』達成提前贈與的直觀試算。此頁以示意模型協助溝通決策，"
-        "實務仍需依保單條款與主管機關規範調整。"
-    )
+    with st.expander("保單贈與的八大好處（簡要）", expanded=False):
+        df = pd.DataFrame({
+            "八大好處": [
+                "1. 降低贈與稅負",
+                "2. 保障資產傳承秩序",
+                "3. 增加家族現金流穩定性",
+                "4. 具成本效益",
+                "5. 靈活分期給付",
+                "6. 避免爭產糾紛",
+                "7. 兼具保障與傳承",
+                "8. 合法稅務節流"
+            ]
+        })
+        st.table(df)
 
-    _benefit_cards()
+    st.markdown("---")
+    st.markdown("### 贈與策略示意試算（*展示用途，非正式稅額*）")
 
-    st.markdown("### 輸入條件（單位：元）")
-    col1, col2 = st.columns([1, 1])
+    # 基本輸入
+    col1, col2 = st.columns(2)
     with col1:
-        annual_premium = st.number_input("年繳保費", min_value=0, step=100_000, value=10_000_000, format="%d")
-        change_year = st.selectbox("第幾年變更要保人", options=[1, 2, 3], index=0)
+        cv = st.number_input("保單現金價值（萬）", min_value=0, max_value=200000, value=2000, step=100)
+        donee_cnt = st.number_input("受贈人數（人）", min_value=1, max_value=10, value=1, step=1)
     with col2:
-        cv1 = st.number_input("第 1 年保價金（年末現金價值）", min_value=0, step=100_000, value=5_000_000, format="%d")
-        cv2 = st.number_input("第 2 年保價金（年末現金價值）", min_value=0, step=100_000, value=14_000_000, format="%d")
-        cv3 = st.number_input("第 3 年保價金（年末現金價值）", min_value=0, step=100_000, value=24_000_000, format="%d")
+        years = st.number_input("預計分年贈與年數（年）", min_value=1, max_value=50, value=5, step=1)
+        add_cash = st.number_input("同步增額（若另購增額保單，萬）", min_value=0, max_value=200000, value=0, step=100)
 
-    result = summarize_plan(annual_premium, change_year, {1: cv1, 2: cv2, 3: cv3})
+    total_base = cv + add_cash  # 示意：若同時加購增額保單，視同一併規劃之資產
 
-    st.markdown("### 效果總覽")
-    colA, colB, colC = st.columns(3)
-    with colA:
-        st.metric("當年贈與金額", f"{result['gift_amount']:,} 元")
-    with colB:
-        st.metric("估算贈與稅", f"{result['gift_tax']:,} 元")
-    with colC:
-        st.metric("贈與淨額（可移轉）", f"{result['net_amount']:,} 元")
+    # 方案 A：一次贈與
+    exempt_A = ANNUAL_GIFT_EXEMPTION * donee_cnt  # 當年可用免稅
+    taxable_A = max(0, total_base - exempt_A)
+    tax_A = _gift_tax(taxable_A)
+    net_A = total_base - tax_A  # 受贈人淨得（示意）
 
-    st.markdown("### 詳細結果")
-    st.table(result["table"])
+    # 方案 B：分年贈與（years 年）
+    total_exempt_B = ANNUAL_GIFT_EXEMPTION * donee_cnt * years
+    taxable_B = max(0, total_base - total_exempt_B)
+    tax_B = _gift_tax(taxable_B)
+    net_B = total_base - tax_B
 
-    df_plot = pd.DataFrame(
-        {
-            "項目": ["贈與金額", "年免稅額", "贈與淨額", "估算贈與稅"],
-            "金額（元）": [
-                result["gift_amount"],
-                GIFT_EXEMPT_YEARLY,
-                result["net_amount"],
-                result["gift_tax"],
-            ],
-        }
+    # 方案 C：估算「免稅全數移轉所需年數」
+    years_needed = math.ceil(total_base / (ANNUAL_GIFT_EXEMPTION * donee_cnt)) if donee_cnt > 0 else float("inf")
+
+    # 輸出表格
+    df_res = pd.DataFrame({
+        "規劃方案": ["一次贈與（當年）", f"分年贈與（{years} 年）", "估算完全免稅所需年數"],
+        "總額（萬）": [int(total_base), int(total_base), int(total_base)],
+        "免稅額度（萬）": [int(exempt_A), int(total_exempt_B), int(ANNUAL_GIFT_EXEMPTION*donee_cnt*years_needed)],
+        "應稅贈與（萬）": [int(taxable_A), int(taxable_B), max(0, int(total_base - ANNUAL_GIFT_EXEMPTION*donee_cnt*years_needed))],
+        "估算贈與稅（萬）": [int(tax_A), int(tax_B), int(_gift_tax(max(0, total_base - ANNUAL_GIFT_EXEMPTION*donee_cnt*years_needed)))],
+        "受贈人淨得（萬）": [int(net_A), int(net_B), int(total_base - _gift_tax(max(0, total_base - ANNUAL_GIFT_EXEMPTION*donee_cnt*years_needed)))]
+    })
+    st.table(df_res)
+
+    # CSV 下載
+    csv = df_res.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("下載保單贈與試算 CSV", csv, "cvgift_simulation.csv", "text/csv", key="cvgift-csv")
+
+    # 視覺化：強調分年優勢
+    fig = px.bar(
+        df_res.iloc[:2],  # 先比較前兩個方案
+        x="規劃方案",
+        y="受贈人淨得（萬）",
+        text="受贈人淨得（萬）",
+        title="一次 vs 分年贈與：受贈人淨得比較（示意）"
     )
-    fig = px.bar(df_plot, x="項目", y="金額（元）", text="金額（元）", title="贈與試算（示意）")
-    fig.update_traces(textposition="outside")
-    fig.update_layout(margin=dict(t=80, b=50), height=480)
-    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+    fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+    # 顯示白色文字差額
+    base = df_res.loc[df_res["規劃方案"] == "一次贈與（當年）", "受贈人淨得（萬）"].iloc[0]
+    for _, row in df_res.iloc[:2].iterrows():
+        if row["規劃方案"] != "一次贈與（當年）":
+            diff = row["受贈人淨得（萬）"] - base
+            fig.add_annotation(x=row["規劃方案"], y=row["受贈人淨得（萬）"]/2,
+                               text=f"{'+' if diff>=0 else ''}{int(diff)}",
+                               showarrow=False, font=dict(color="white", size=16))
+    st.plotly_chart(fig, config={"responsive": True}, use_container_width=True)
 
-    with st.expander("假設與備註", expanded=False):
-        st.markdown(
-            """
-- 變更要保人視同贈與，贈與額以 **當年度年末現金價值** 為基礎（示意）。
-- 年免稅額假設為 **2,440,000 元**；贈與稅採 **10%/15%/20%** 之分級示意。
-- 本頁僅供規劃討論，實務仍需依：要保/被保/受益人關係、保單條款、保單價值金定義、保險法與稅法等規範調整。
-- 如需進一步法遵檢核與客製化模型，我們可在內部版本擴充計算引擎與輸出報告。
-"""
-        )
+    st.caption("＊以上為示意模型，實務需依「保單類型、要保人/被保險人/受益人結構、實質課稅規則」綜合判斷。可於會談中進一步採用精準版。")
