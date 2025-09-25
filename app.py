@@ -16,7 +16,7 @@ from modules.wrapped_estate import run_estate
 from modules.wrapped_cvgift import run_cvgift
 
 # ======================================================
-# 0) Favicon 與 Page Config（保證顯示）
+# 0) 資產路徑與 Page Config（保證 Logo / Favicon 顯示）
 # ======================================================
 
 # ---- Robust asset path helpers ----
@@ -64,6 +64,8 @@ elif os.path.exists(_asset_path("logo.png")):
 
 # ======================================================
 # 1) 單一登入（防共用）與逾時 60 分鐘
+#    - 以 username 為 key，只保留最新 session_id
+#    - 舊裝置下一次互動時會自動失效並登出
 # ======================================================
 @st.cache_resource
 def _session_registry():
@@ -73,7 +75,7 @@ def _session_registry():
 REG = _session_registry()
 SESSION_TIMEOUT_SECS = 60 * 60
 
-def _now(): 
+def _now() -> float:
     return time.time()
 
 def _cleanup():
@@ -82,23 +84,27 @@ def _cleanup():
         if now - REG[u].get("last_seen", 0) > SESSION_TIMEOUT_SECS:
             REG.pop(u, None)
 
-def _touch(u, sid):
+def _touch(u: str, sid: str):
     REG[u] = {"session_id": sid, "last_seen": _now()}
 
-def _valid(u, sid):
+def _valid(u: str, sid: str) -> bool:
     r = REG.get(u)
     return bool(
         r and r.get("session_id") == sid and
         _now() - r.get("last_seen", 0) <= SESSION_TIMEOUT_SECS
     )
 
-def _logout(u):
+def _logout(u: str):
     REG.pop(u, None)
 
 _cleanup()
 
 # ======================================================
-# 2) 授權名單：支援 secrets.toml / 環境變數 / 檔內變數
+# 2) 授權名單：以 st.secrets 優先；支援環境變數與程式內常數
+#    secrets.toml 結構：
+#    [authorized_users.admin]
+#    name="管理者"; username="admin"; password="xxx"; role="admin"
+#    start_date="2025-01-01"; end_date="2026-12-31"
 # ======================================================
 try:
     import tomllib as toml  # Python 3.11+
@@ -133,11 +139,11 @@ def _read_authorized_users_raw() -> dict:
 
     return {}
 
-def _load_users_from_sources():
+def _load_users_from_sources() -> dict:
     """
     轉成 {username(區分大小寫): {...}}。
     - 可用 section 名稱或內層 username 欄位登入。
-    - AUTH_<USERNAME>_PASSWORD 可覆蓋密碼（例：AUTH_GRACE_PASSWORD）
+    - 可用環境變數 AUTH_<USERNAME>_PASSWORD 覆蓋密碼（例：AUTH_GRACE_PASSWORD）
     """
     users = {}
     raw = _read_authorized_users_raw()
@@ -178,28 +184,32 @@ def check_credentials(input_username: str, input_password: str):
     return True, info, ""
 
 # ======================================================
-# 3) 頂部抬頭（Logo RWD + 2x，與標題對齊）
+# 3) 頂部抬頭（Logo 36px RWD + 2x，與標題對齊）
 # ======================================================
 st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .brand { display:flex; align-items:center; gap:14px; }
-.brand-title { margin:0; font-size:26px; color:#000; line-height:1; }
-.brand-logo { height:32px; image-rendering:auto; }   /* 桌機縮小為 32px */
-@media (max-width:1200px){ .brand-logo{ height:28px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:24px; } .brand-title{ font-size:22px; } }
+.brand-title { margin:0; font-size:24px; color:#000; line-height:1; }  /* 主標題縮小一號 */
+.brand-logo { height:36px; image-rendering:auto; }                     /* 桌機 36px */
+@media (max-width:1200px){ .brand-logo{ height:30px; } .brand-title{ font-size:22px; } }
+@media (max-width:768px){  .brand-logo{ height:26px; } .brand-title{ font-size:20px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
 
-# Logo 顯示區
+# Logo 顯示區（支援 Retina 與 base64 內嵌）
 logo_1x_path = _asset_path("logo.png")
 logo_2x_path = _asset_path("logo@2x.png") if os.path.exists(_asset_path("logo@2x.png")) else None
 b64_1x = _asset_b64("logo.png")
 b64_2x = _asset_b64("logo@2x.png") if logo_2x_path else None
 
 if b64_2x and b64_1x:
-    logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' srcset='data:image/png;base64,{b64_1x} 1x, data:image/png;base64,{b64_2x} 2x' class='brand-logo' alt='logo'>"
+    logo_img_tag = (
+        f"<img src='data:image/png;base64,{b64_1x}' "
+        f"srcset='data:image/png;base64,{b64_1x} 1x, data:image/png;base64,{b64_2x} 2x' "
+        f"class='brand-logo' alt='logo'>"
+    )
 elif b64_1x:
     logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' class='brand-logo' alt='logo'>"
 else:
@@ -217,7 +227,7 @@ right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ======================================================
-# 4) 右上角登入/登出
+# 4) 右上角登入/登出（單一登入＋60分鐘逾時）
 # ======================================================
 if "auth" not in st.session_state:
     st.session_state.auth = {
@@ -225,14 +235,16 @@ if "auth" not in st.session_state:
         "end_date": "", "session_id": ""
     }
 
-# 檢查現有 session 是否仍有效
+# 檢查現有 session 是否仍有效；若已被新的登入覆蓋，立即登出
 if st.session_state.auth["authenticated"]:
     u = st.session_state.auth["username"]
     sid = st.session_state.auth["session_id"]
     if not _valid(u, sid):
+        # 已被踢出或逾時
         st.session_state.auth = {
             "authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""
         }
+        st.warning("此帳號已在其他裝置登入，您已被登出。")
     else:
         _touch(u, sid)
 
@@ -246,7 +258,9 @@ with right_col:
             if submitted:
                 ok, info, msg = check_credentials(input_username, input_password)
                 if ok:
+                    # 單一登入：新登入直接覆蓋舊裝置（踢出前一個 session）
                     sid = uuid.uuid4().hex
+                    _touch(input_username, sid)
                     st.session_state.auth = {
                         "authenticated": True,
                         "username": input_username,
@@ -255,7 +269,6 @@ with right_col:
                         "end_date": info["end_date"],
                         "session_id": sid
                     }
-                    _touch(input_username, sid)
                     st.success(f"登入成功！歡迎 {info['name']} 😀")
                 else:
                     st.error(msg)
