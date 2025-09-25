@@ -8,8 +8,8 @@ from datetime import datetime
 
 import streamlit as st
 from PIL import Image
-from pathlib import Path                 # ← 確保已匯入 Path
-from typing import Optional              # ← 以及 Optional
+from pathlib import Path
+from typing import Optional
 
 # === 子模組 ===
 from modules.wrapped_estate import run_estate
@@ -42,7 +42,7 @@ st.set_page_config(
     layout="wide"
 )
 
-def _inject_favicon(path: str):
+def _inject_favicon(path: str) -> None:
     """有些環境 page_icon 不一定立即生效，額外再注入一次。"""
     try:
         with open(path, "rb") as f:
@@ -63,7 +63,7 @@ elif os.path.exists(_asset_path("logo.png")):
 # 1) 單一登入機制（後登入踢掉前登入）＋60 分鐘逾時
 # ======================================================
 @st.cache_resource
-def _session_registry():
+def _session_registry() -> dict:
     # username -> {"session_id": str, "last_seen": float}
     return {}
 
@@ -73,30 +73,30 @@ SESSION_TIMEOUT_SECS = 60 * 60
 def _now() -> float:
     return time.time()
 
-def _cleanup():
+def _cleanup() -> None:
     now = _now()
     for u in list(REG.keys()):
         if now - REG[u].get("last_seen", 0) > SESSION_TIMEOUT_SECS:
             REG.pop(u, None)
 
-def _touch(u: str, sid: str):
+def _touch(u: str, sid: str) -> None:
     REG[u] = {"session_id": sid, "last_seen": _now()}
 
 def _valid(u: str, sid: str) -> bool:
     r = REG.get(u)
     return bool(r and r.get("session_id") == sid and _now() - r.get("last_seen", 0) <= SESSION_TIMEOUT_SECS)
 
-def _logout(u: str):
+def _logout(u: str) -> None:
     REG.pop(u, None)
 
 _cleanup()
 
 # ======================================================
 # 2) 授權名單：以 st.secrets 優先；支援環境變數（TOML 字串）
-#    .streamlit/secrets.toml 範例：
-#    [authorized_users.admin]
-#    name="管理者"; username="admin"; password="xxx"; role="admin"
-#    start_date="2025-01-01"; end_date="2026-12-31"
+#   .streamlit/secrets.toml 範例：
+#   [authorized_users.admin]
+#   name="管理者"; username="admin"; password="xxx"; role="admin"
+#   start_date="2025-01-01"; end_date="2026-12-31"
 # ======================================================
 try:
     import tomllib as toml  # Python 3.11+
@@ -124,7 +124,7 @@ def _load_users_from_sources() -> dict:
     """
     轉成 {username: {...}}；允許用環境變數 AUTH_<USERNAME>_PASSWORD 覆蓋密碼。
     """
-    users = {}
+    users: dict = {}
     raw = _read_authorized_users_raw()
     for section_name, d in raw.items():
         if not isinstance(d, dict):
@@ -197,13 +197,13 @@ right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ======================================================
-# 4) 登入/登出（登入成功後隱藏輸入框）
+# 4) 登入/登出（登入成功後隱藏輸入框；後登入踢前登入）
 # ======================================================
 if "auth" not in st.session_state:
     st.session_state.auth = {
         "authenticated": False, "username": "", "name": "", "role": "",
         "end_date": "", "session_id": ""
-    }
+        }
 
 # 若被其他裝置登入覆蓋，這裡會立即偵測並登出
 if st.session_state.auth["authenticated"]:
@@ -211,7 +211,8 @@ if st.session_state.auth["authenticated"]:
     sid = st.session_state.auth["session_id"]
     if not _valid(u, sid):
         st.session_state.auth = {
-            "authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""
+            "authenticated": False, "username": "", "name": "", "role": "",
+            "end_date": "", "session_id": ""
         }
         st.warning("此帳號已在其他裝置登入，您已被登出。")
     else:
