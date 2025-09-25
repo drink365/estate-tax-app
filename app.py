@@ -203,7 +203,7 @@ if "auth" not in st.session_state:
     st.session_state.auth = {
         "authenticated": False, "username": "", "name": "", "role": "",
         "end_date": "", "session_id": ""
-        }
+    }
 
 # 若被其他裝置登入覆蓋，這裡會立即偵測並登出
 if st.session_state.auth["authenticated"]:
