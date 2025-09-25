@@ -93,6 +93,10 @@ _cleanup()
 
 # ======================================================
 # 2) 授權名單：以 st.secrets 優先；支援環境變數（TOML 字串）
+#   .streamlit/secrets.toml 範例：
+#   [authorized_users.admin]
+#   name="管理者"; username="admin"; password="xxx"; role="admin"
+#   start_date="2025-01-01"; end_date="2026-12-31"
 # ======================================================
 try:
     import tomllib as toml  # Python 3.11+
@@ -117,6 +121,9 @@ def _read_authorized_users_raw() -> dict:
     return {}
 
 def _load_users_from_sources() -> dict:
+    """
+    轉成 {username: {...}}；允許用環境變數 AUTH_<USERNAME>_PASSWORD 覆蓋密碼。
+    """
     users: dict = {}
     raw = _read_authorized_users_raw()
     for section_name, d in raw.items():
@@ -159,14 +166,15 @@ st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .brand { display:flex; align-items:center; gap:14px; }
-.brand-title { margin:0; font-size:22px; color:#000; line-height:1; }
-.brand-logo { height:36px; image-rendering:auto; }
+.brand-title { margin:0; font-size:22px; color:#000; line-height:1; }  /* 主標題縮小 */
+.brand-logo { height:36px; image-rendering:auto; }                     /* 桌機 36px */
 @media (max-width:1200px){ .brand-logo{ height:30px; } .brand-title{ font-size:20px; } }
 @media (max-width:768px){  .brand-logo{ height:26px; } .brand-title{ font-size:18px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
 
+# Logo（支援 Retina 與 base64 內嵌）
 b64_1x = _asset_b64("logo.png")
 b64_2x = _asset_b64("logo@2x.png")
 if b64_2x and b64_1x:
@@ -197,6 +205,7 @@ if "auth" not in st.session_state:
         "end_date": "", "session_id": ""
     }
 
+# 若被其他裝置登入覆蓋，這裡會立即偵測並登出
 if st.session_state.auth["authenticated"]:
     u = st.session_state.auth["username"]
     sid = st.session_state.auth["session_id"]
@@ -219,6 +228,7 @@ with right_col:
             if submitted:
                 ok, info, msg = check_credentials(input_username, input_password)
                 if ok:
+                    # 單一登入：新登入覆蓋前一個 session（踢掉前次登入）
                     sid = uuid.uuid4().hex
                     _touch(input_username, sid)
                     st.session_state.auth = {
