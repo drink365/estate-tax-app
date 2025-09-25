@@ -1,317 +1,185 @@
-import os
-import json
-import time
-import secrets
-import base64
-import datetime as _dt
-import threading
 import streamlit as st
+import time
+import uuid
+from datetime import datetime, timedelta
 
 from modules.wrapped_estate import run_estate
 from modules.wrapped_cvgift import run_cvgift
 
-# ===================== 基本設定 =====================
+# ===============================
+# 0) 平台一次性設定（標題、favicon）
+# ===============================
 st.set_page_config(
-    page_title="《影響力》傳承策略平台｜整合版",
-    layout="wide",
+    page_title="影響力傳承策略平台",
     page_icon="assets/logo2.png",
+    layout="wide"
 )
 
-SESSION_STORE_PATH = os.environ.get("SESSION_STORE_PATH", ".sessions.json")
-SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))  # 60 分鐘
+# ===============================
+# 1) 單一登入（防多人共用同帳號）與 60 分鐘逾時
+# ===============================
+@st.cache_resource
+def _session_registry():
+    # username -> {"session_id": str, "last_seen": float (epoch)}
+    return {}
 
-# ===================== 載入 Logo（為避免路徑問題，轉成 data-URI） =====================
-def load_logo_data_uri(path="assets/logo.png"):
+REG = _session_registry()
+SESSION_TIMEOUT_SECS = 60 * 60  # 60 分鐘
+
+def _now_epoch():
+    return time.time()
+
+def _cleanup_expired_sessions():
+    # 清理超時的舊 session，以避免卡死
+    now = _now_epoch()
+    expired = []
+    for u, data in REG.items():
+        if now - data.get("last_seen", 0) > SESSION_TIMEOUT_SECS:
+            expired.append(u)
+    for u in expired:
+        REG.pop(u, None)
+
+def _touch_session(username: str, session_id: str):
+    REG[username] = {"session_id": session_id, "last_seen": _now_epoch()}
+
+def _is_active_session(username: str, session_id: str) -> bool:
+    rec = REG.get(username)
+    return bool(rec and rec.get("session_id") == session_id and (_now_epoch() - rec.get("last_seen", 0) <= SESSION_TIMEOUT_SECS))
+
+def _logout_session(username: str):
+    if username in REG:
+        REG.pop(username, None)
+
+_cleanup_expired_sessions()
+
+# ===============================
+# 2) 讀取授權名單 (st.secrets["authorized_users"])
+#    注意：帳號區分大小寫
+# ===============================
+def check_credentials(input_username: str, input_password: str):
+    au = st.secrets.get("authorized_users", {})
+    # 區分大小寫：直接用鍵值查
+    user_info = au.get(input_username)
+    if not user_info:
+        return False, None, "查無此使用者"
+    if input_password != user_info.get("password"):
+        return False, None, "密碼錯誤"
+    # 檢查有效日期（含當日）
     try:
-        with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-        return f"data:image/png;base64,{b64}"
+        start_date = datetime.strptime(user_info["start_date"], "%Y-%m-%d").date()
+        end_date = datetime.strptime(user_info["end_date"], "%Y-%m-%d").date()
+        today = datetime.today().date()
+        if not (start_date <= today <= end_date):
+            return False, None, "您的使用權限尚未啟用或已過期"
     except Exception:
-        return None
+        # 格式錯誤時，保守阻擋
+        return False, None, "帳號日期設定格式有誤"
+    return True, user_info, ""
 
-logo_data_uri = load_logo_data_uri()
+# ===============================
+# 3) 頂部抬頭（左：logo+平台名；右：登入區/歡迎+登出）
+# ===============================
+logo_col, title_col, user_col = st.columns([1, 8, 6], gap="small")
 
-# ===================== 全域樣式（Header 對齊 + Tab + 標題 + Plotly文字顏色） =====================
-INK   = "#111827"
-MUTED = "#6b7280"
-BRAND = "#e11d48"
-
-st.markdown(
-    f"""
-<style>
-/* 隱藏 Streamlit 內建頂列/選單/頁尾，避免壓到主標題 */
-[data-testid="stToolbar"] {{ visibility:hidden; height:0; position:fixed; }}
-header {{ visibility:hidden; height:0; }}
-#MainMenu {{ visibility:hidden; }}
-footer {{ visibility:hidden; }}
-
-/* 背景與容器 */
-.stApp {{
-  background: linear-gradient(180deg, #fff, #fff9f9 30%, #fff 80%);
-  padding-top: .5rem;
-}}
-.block-container {{ padding-top: .25rem; max-width: 1200px; }}
-
-/* Header：Logo + Title（同一行垂直置中；手機自動換行） */
-.header-wrap {{
-  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-}}
-.header-logo {{
-  height: clamp(28px, 6vw, 44px);
-  width:auto; display:block; object-fit:contain; align-self:center;
-  image-rendering:-webkit-optimize-contrast; image-rendering:optimizeQuality;
-}}
-.header-text h1 {{
-  font-size: clamp(22px, 3.4vw, 38px);
-  line-height: 1.15; margin: 0; color: {INK}; font-weight: 800;
-}}
-.header-text p {{
-  margin: 2px 0 0 0; color: {MUTED}; font-size: .95rem;
-}}
-@media (max-width: 640px) {{
-  .header-wrap {{ flex-direction: column; align-items:flex-start; gap:8px; }}
-}}
-
-/* 細分隔線（品牌色漸層） */
-.hr-thin {{
-  border:none; height:1px;
-  background: linear-gradient(90deg, {BRAND}, transparent);
-  margin:.6rem 0 1rem 0;
-}}
-
-/* Tabs：簡潔底線樣式 */
-.stTabs {{ padding-top: .25rem; }}
-.stTabs [role="tablist"] {{ gap:2rem; }}
-.stTabs [role="tab"] {{
-  font-size:1.06rem; padding:.6rem .25rem; color:{MUTED};
-  border-bottom:2px solid transparent;
-}}
-.stTabs [role="tab"][aria-selected="true"] {{
-  color:{BRAND}; border-color:{BRAND}; font-weight:700;
-}}
-
-/* 右上登出：低調 */
-.logout-btn>button {{
-  border-radius:4px !important; padding:.35rem .75rem !important;
-  box-shadow:none !important; border:1px solid #d1d5db !important;
-  color:#374151 !important; background:#f9fafb !important; font-size:.85rem !important;
-}}
-.logout-btn>button:hover {{ background:#f3f4f6 !important; color:#111827 !important; }}
-
-/* 功能頁主標題（統一） */
-.page-title {{
-  font-size: clamp(20px, 2.4vw, 28px);
-  font-weight: 700;
-  color: {INK};
-  margin: 1rem 0 .5rem 0;
-}}
-
-/* Plotly：柱內數字 & 註解改白色 */
-.js-plotly-plot .bartext {{ fill:#ffffff !important; }}
-.js-plotly-plot g.annotation text {{ fill:#ffffff !important; }}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-# ===================== 簡易單點登入（大小寫敏感＋踢掉舊登入） =====================
-_store_lock = threading.Lock()
-
-def _load_store() -> dict:
-    if not os.path.exists(SESSION_STORE_PATH):
-        return {}
+with logo_col:
     try:
-        with open(SESSION_STORE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        st.image("assets/logo.png", width=40)
     except Exception:
-        return {}
+        st.write("")
 
-def _save_store(store: dict):
-    tmp = SESSION_STORE_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(store, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, SESSION_STORE_PATH)
-
-def _cleanup_store(store: dict):
-    now = int(time.time()); changed = False
-    for u in list(store.keys()):
-        if now - int(store[u].get("last_seen", 0)) > SESSION_TTL_SECONDS:
-            store.pop(u, None); changed = True
-    if changed: _save_store(store)
-
-def _get_active_session(username: str):
-    s = _load_store()
-    return s.get(username)
-
-def _set_active_session(username: str, token: str, meta: dict):
-    with _store_lock:
-        s = _load_store()
-        s[username] = {"token": token, "last_seen": int(time.time()), "meta": meta}
-        _save_store(s)
-
-def _refresh_active_session(username: str, token: str):
-    with _store_lock:
-        s = _load_store(); sess = s.get(username)
-        if not sess or sess.get("token") != token: return False
-        sess["last_seen"] = int(time.time()); _save_store(s); return True
-
-def _invalidate_session(username: str):
-    with _store_lock:
-        s = _load_store()
-        if username in s: s.pop(username); _save_store(s)
-
-def _load_users_from_toml():
-    try:
-        import tomllib as _toml  # py3.11+
-    except Exception:
-        import tomli as _toml     # py3.10
-
-    raw_env = os.environ.get("AUTHORIZED_USERS", "")
-    data = None
-    if raw_env.strip():
-        try: data = _toml.loads(raw_env.strip())
-        except Exception: st.error("ENV AUTHORIZED_USERS TOML 格式錯誤"); st.stop()
-
-    if data is None:
-        try: sec = st.secrets.get("AUTHORIZED_USERS", None)
-        except Exception: sec = None
-        if isinstance(sec, str) and sec.strip():
-            try: data = _toml.loads(sec.strip())
-            except Exception: st.error("secrets AUTHORIZED_USERS TOML 格式錯誤"); st.stop()
-        elif isinstance(sec, dict):
-            data = dict(sec)
-
-    if data is None: return {}
-
-    users = {}
-    auth = data.get("authorized_users", {}) if isinstance(data, dict) else {}
-    for _, info in auth.items():
-        try:
-            username = str(info["username"]).strip()  # 大小寫敏感
-            users[username] = {
-                "username": username,
-                "name": str(info.get("name", username)),
-                "role": str(info.get("role", "member")),
-                "password": str(info["password"]),
-                "start_date": _dt.date.fromisoformat(info.get("start_date", "1900-01-01")),
-                "end_date": _dt.date.fromisoformat(info.get("end_date", "2999-12-31")),
-            }
-        except Exception:
-            continue
-    return users
-
-def _check_login(username: str, password: str, users: dict):
-    u = users.get((username or "").strip())  # 大小寫敏感查找
-    if not u: return False, None
-    today = _dt.date.today()
-    if not (u["start_date"] <= today <= u["end_date"]): return False, None
-    if password != u["password"]: return False, None
-    return True, u
-
-def _login_form(users: dict):
-    st.markdown("### 會員登入")
-    with st.form("login_form"):
-        u = st.text_input("帳號")
-        p = st.text_input("密碼", type="password")
-        takeover = st.checkbox("若此帳號已在其他裝置登入，允許我搶下使用權（登出他人）", value=True)
-        if st.form_submit_button("登入"):
-            ok, info = _check_login(u, p, users)
-            if not ok:
-                st.error("帳號或密碼錯誤，或帳號已過期"); return
-            username = info["username"]  # 保持大小寫
-            # 是否已有其他裝置在用？
-            existed = _get_active_session(username)
-            if existed and not takeover:
-                st.error("此帳號目前已在其他裝置使用中；如需登入，請勾選『允許我搶下使用權』。")
-                return
-            token = secrets.token_urlsafe(24)
-            # 無論如何：新的 token 會覆蓋舊的 → 舊裝置立刻失效（踢下線）
-            _set_active_session(username, token, {"ts": int(time.time())})
-            st.session_state.update({
-                "authed": True,
-                "user": info["name"],
-                "username": username,
-                "role": info.get("role", "member"),
-                "start_date": info.get("start_date"),
-                "end_date": info.get("end_date"),
-                "session_token": token,
-            })
-            st.rerun()
-
-def ensure_auth() -> bool:
-    users = _load_users_from_toml()
-    if not st.session_state.get("authed"):
-        _login_form(users); return False
-    u = st.session_state.get("username", "")
-    t = st.session_state.get("session_token", "")
-    if not u or not t or not _refresh_active_session(u, t):
-        # token 不一致（代表被別處登入覆蓋）或逾時 → 直接登出
-        st.session_state.clear()
-        _login_form(users)
-        return False
-    return True
-
-# ===================== Header：Logo + 平台主標題 =====================
-if logo_data_uri:
+with title_col:
     st.markdown(
-        f"""
-        <div class="header-wrap">
-          <img class="header-logo" src="{logo_data_uri}" alt="logo" />
-          <div class="header-text">
-            <h1>《影響力》傳承策略平台｜整合版</h1>
-            <p>專業 × 溫度 × 智能｜遺產稅試算 + 保單贈與規劃</p>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-else:
-    st.markdown(
-        f"""
-        <div class="header-text">
-          <h1>《影響力》傳承策略平台｜整合版</h1>
-          <p style="color:{MUTED};">專業 × 溫度 × 智能｜遺產稅試算 + 保單贈與規劃</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+        "<div style='display:flex;align-items:center;gap:12px;'>"
+        "<h1 style='margin:0;font-size:26px;color:#000;'>影響力傳承策略平台</h1>"
+        "</div>",
+        unsafe_allow_html=True
     )
 
-st.markdown('<hr class="hr-thin">', unsafe_allow_html=True)
+# 初始化 session 狀態
+if "auth" not in st.session_state:
+    st.session_state.auth = {
+        "authenticated": False,
+        "username": "",
+        "name": "",
+        "role": "",
+        "end_date": "",
+        "session_id": ""
+    }
 
-# ===================== 歡迎列＋登出（低調） =====================
-if ensure_auth():
-    exp_date = st.session_state.get("end_date")
-    exp_str = exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, _dt.date) else "N/A"
-    name = st.session_state.get("user", "")
+# 驗證現有 session 是否仍有效（單一登入 + 逾時控制）
+if st.session_state.auth["authenticated"]:
+    u = st.session_state.auth["username"]
+    sid = st.session_state.auth["session_id"]
+    if not _is_active_session(u, sid):
+        # 逾時或被別處擠下線
+        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""}
+    else:
+        # 更新 last_seen
+        _touch_session(u, sid)
 
-    c1, c2, _ = st.columns([8, 1.5, 10])
-    with c1:
-        st.markdown(f"<div style='color:{MUTED};font-size:.95rem;'>歡迎 😀，{name}｜有效期限至 {exp_str}</div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown("<div class='logout-btn'>", unsafe_allow_html=True)
-        if st.button("登出", key="logout_btn"):
-            try: _invalidate_session(st.session_state.get("username",""))
-            except Exception: pass
-            st.session_state.clear(); st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+with user_col:
+    container = st.container()
+    if not st.session_state.auth["authenticated"]:
+        # 輕量登入表單（同排，低存在感）
+        with container.form("top_login_inline", clear_on_submit=False):
+            c1, c2, c3, c4 = st.columns([3, 3, 2, 2])
+            with c1:
+                input_username = st.text_input("帳號", key="login_user", label_visibility="collapsed", placeholder="帳號")
+            with c2:
+                input_password = st.text_input("密碼", key="login_pass", label_visibility="collapsed", placeholder="密碼", type="password")
+            with c3:
+                submitted = st.form_submit_button("登入")
+            with c4:
+                st.write("")  # 對齊
+
+            if submitted:
+                ok, info, msg = check_credentials(input_username, input_password)
+                if ok:
+                    # 單一登入：若已有其他裝置在用，直接踢下線（覆蓋 session_id）
+                    sid = uuid.uuid4().hex
+                    st.session_state.auth = {
+                        "authenticated": True,
+                        "username": input_username,
+                        "name": info.get("name", input_username),
+                        "role": info.get("role", ""),
+                        "end_date": info.get("end_date", ""),
+                        "session_id": sid
+                    }
+                    _touch_session(input_username, sid)
+                    st.success(f"登入成功！歡迎 {info.get('name', input_username)} 😀")
+                else:
+                    st.error(msg)
+    else:
+        # 右上角一行顯示：歡迎 + 到期 + 登出
+        name = st.session_state.auth["name"] or st.session_state.auth["username"]
+        end_date = st.session_state.auth["end_date"]
+        colA, colB = st.columns([8, 2])
+        with colA:
+            st.markdown(
+                f"<div style='text-align:right;font-size:14px;color:#333;'>"
+                f"歡迎 {name} 😀｜有效期限至 {end_date}"
+                f"</div>", unsafe_allow_html=True
+            )
+        with colB:
+            if st.button("登出", use_container_width=True):
+                _logout_session(st.session_state.auth["username"])
+                st.session_state.auth = {"authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""}
+
+st.markdown("<hr style='margin-top:6px;margin-bottom:14px;'>", unsafe_allow_html=True)
+
+# ===============================
+# 4) 置頂頁籤（不使用側邊欄）
+# ===============================
+tab1, tab2 = st.tabs(["AI秒算遺產稅", "保單贈與規劃"])
+
+# 若未登入，兩頁內容都以「請先登入」提示
+if not st.session_state.auth["authenticated"]:
+    with tab1:
+        st.info("此功能需登入後使用。請在右上角先登入。")
+    with tab2:
+        st.info("此功能需登入後使用。請在右上角先登入。")
 else:
-    st.stop()
-
-# ===================== Tabs（內容由功能模組渲染） =====================
-tabs = st.tabs(["🏛️ 遺產稅試算", "🎁 保單贈與規劃"])
-
-with tabs[0]:
-    try:
+    with tab1:
         run_estate()
-    except Exception as e:
-        st.error(f"載入遺產稅模組時發生錯誤：{e}")
-
-with tabs[1]:
-    try:
+    with tab2:
         run_cvgift()
-    except Exception as e:
-        st.error(f"載入保單贈與模組時發生錯誤：{e}")
-
-# ===================== Footer =====================
-st.markdown("---")
-st.caption("《影響力》傳承策略平台｜永傳家族辦公室 ｜ 聯絡信箱：123@gracefo.com")
