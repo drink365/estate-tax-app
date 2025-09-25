@@ -73,7 +73,7 @@ def _session_registry():
 REG = _session_registry()
 SESSION_TIMEOUT_SECS = 60 * 60
 
-def _now():
+def _now(): 
     return time.time()
 
 def _cleanup():
@@ -184,34 +184,27 @@ st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .brand { display:flex; align-items:center; gap:14px; }
-.brand-title { margin:0; font-size:26px; color:#2b2f36; line-height:1; }
-.brand-logo { height:36px; image-rendering:auto; }               /* ← 桌機 36px */
-@media (max-width:1200px){ .brand-logo{ height:32px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:28px; } .brand-title{ font-size:22px; } }
+.brand-title { margin:0; font-size:26px; color:#000; line-height:1; }
+.brand-logo { height:96px; image-rendering:auto; }
+@media (max-width:1200px){ .brand-logo{ height:72px; } .brand-title{ font-size:24px; } }
+@media (max-width:768px){  .brand-logo{ height:60px; } .brand-title{ font-size:22px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
 
-# Logo 顯示區 — 內嵌 base64 + Retina 支援
+# Logo 顯示區
 logo_1x_path = _asset_path("logo.png")
 logo_2x_path = _asset_path("logo@2x.png") if os.path.exists(_asset_path("logo@2x.png")) else None
 b64_1x = _asset_b64("logo.png")
 b64_2x = _asset_b64("logo@2x.png") if logo_2x_path else None
 
 if b64_2x and b64_1x:
-    logo_img_tag = (
-        f"<img src='data:image/png;base64,{b64_1x}' "
-        f"srcset='data:image/png;base64,{b64_1x} 1x, data:image/png;base64,{b64_2x} 2x' "
-        f"class='brand-logo' alt='logo'>"
-    )
+    logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' srcset='data:image/png;base64,{b64_1x} 1x, data:image/png;base64,{b64_2x} 2x' class='brand-logo' alt='logo'>"
 elif b64_1x:
     logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' class='brand-logo' alt='logo'>"
 else:
     if logo_2x_path and os.path.exists(logo_2x_path):
-        logo_img_tag = (
-            f"<img src='{logo_1x_path}' srcset='{logo_1x_path} 1x, {logo_2x_path} 2x' "
-            f"class='brand-logo' alt='logo'>"
-        )
+        logo_img_tag = f"<img src='{logo_1x_path}' srcset='{logo_1x_path} 1x, {logo_2x_path} 2x' class='brand-logo' alt='logo'>"
     else:
         logo_img_tag = f"<img src='{logo_1x_path}' class='brand-logo' alt='logo'>"
 
