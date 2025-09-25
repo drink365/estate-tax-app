@@ -8,8 +8,11 @@ from PIL import Image
 from datetime import datetime
 import streamlit as st
 
-from pathlib import Path
-from typing import Optional
+# 兼容 Python 3.11+（內建 tomllib）與較舊版本（安裝 toml）
+try:
+    import tomllib as toml  # Python 3.11+
+except Exception:  # pragma: no cover
+    import toml  # pip install toml
 
 # === 子模組 ===
 from modules.wrapped_estate import run_estate
@@ -18,30 +21,17 @@ from modules.wrapped_cvgift import run_cvgift
 # ======================================================
 # 0) Favicon 與 Page Config（保證顯示）
 # ======================================================
-
-# ---- Robust asset path helpers ----
-BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "assets"
-
-def _asset_path(name: str) -> str:
-    """Return a string path to asset that works in Streamlit (posix)."""
-    p = ASSETS_DIR / name
-    return str(p)
-
-@st.cache_data(show_spinner=False)
-def _asset_b64(name: str) -> Optional[str]:
-    """Read an asset file and return base64 string, or None if missing."""
+def _load_image(path):
     try:
-        with open(ASSETS_DIR / name, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        return Image.open(path)
     except Exception:
         return None
 
-# Page config with icon fallback
+_fav_img = _load_image("assets/logo2.png") or _load_image("assets/logo.png")
+
 st.set_page_config(
     page_title="影響力傳承策略平台",
-    page_icon=Image.open(_asset_path("logo2.png")) if os.path.exists(_asset_path("logo2.png"))
-              else (Image.open(_asset_path("logo.png")) if os.path.exists(_asset_path("logo.png")) else "🧭"),
+    page_icon=_fav_img if _fav_img else "🧭",
     layout="wide"
 )
 
@@ -57,10 +47,10 @@ def _inject_favicon(path: str):
     except Exception:
         pass
 
-if os.path.exists(_asset_path("logo2.png")):
-    _inject_favicon(_asset_path("logo2.png"))
-elif os.path.exists(_asset_path("logo.png")):
-    _inject_favicon(_asset_path("logo.png"))
+if os.path.exists("assets/logo2.png"):
+    _inject_favicon("assets/logo2.png")
+elif os.path.exists("assets/logo.png"):
+    _inject_favicon("assets/logo.png")
 
 # ======================================================
 # 1) 單一登入（防共用）與逾時 60 分鐘
@@ -100,11 +90,6 @@ _cleanup()
 # ======================================================
 # 2) 授權名單：支援 secrets.toml / 環境變數 / 檔內變數
 # ======================================================
-try:
-    import tomllib as toml  # Python 3.11+
-except Exception:
-    import toml  # pip install toml
-
 def _parse_users_from_toml_str(toml_str: str) -> dict:
     if not toml_str or not toml_str.strip():
         return {}
@@ -178,35 +163,27 @@ def check_credentials(input_username: str, input_password: str):
     return True, info, ""
 
 # ======================================================
-# 3) 頂部抬頭（Logo RWD + 2x，與標題對齊）
+# 3) 頂部抬頭（Logo RWD + 2x，與標題對齊）— 放大版
 # ======================================================
 st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .brand { display:flex; align-items:center; gap:14px; }
 .brand-title { margin:0; font-size:26px; color:#000; line-height:1; }
-.brand-logo { height:96px; image-rendering:auto; }
-@media (max-width:1200px){ .brand-logo{ height:72px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:60px; } .brand-title{ font-size:22px; } }
+.brand-logo { height:80px; }   /* ← 桌機 80px */
+@media (max-width:1200px){ .brand-logo{ height:64px; } .brand-title{ font-size:24px; } }
+@media (max-width:768px){  .brand-logo{ height:52px; } .brand-title{ font-size:22px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
 
-# Logo 顯示區
-logo_1x_path = _asset_path("logo.png")
-logo_2x_path = _asset_path("logo@2x.png") if os.path.exists(_asset_path("logo@2x.png")) else None
-b64_1x = _asset_b64("logo.png")
-b64_2x = _asset_b64("logo@2x.png") if logo_2x_path else None
-
-if b64_2x and b64_1x:
-    logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' srcset='data:image/png;base64,{b64_1x} 1x, data:image/png;base64,{b64_2x} 2x' class='brand-logo' alt='logo'>"
-elif b64_1x:
-    logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' class='brand-logo' alt='logo'>"
-else:
-    if logo_2x_path and os.path.exists(logo_2x_path):
-        logo_img_tag = f"<img src='{logo_1x_path}' srcset='{logo_1x_path} 1x, {logo_2x_path} 2x' class='brand-logo' alt='logo'>"
-    else:
-        logo_img_tag = f"<img src='{logo_1x_path}' class='brand-logo' alt='logo'>"
+# 支援 Retina：若有 logo@2x.png 就用 srcset
+logo_1x = "assets/logo.png"
+logo_2x = "assets/logo@2x.png" if os.path.exists("assets/logo@2x.png") else None
+logo_img_tag = (
+    f"<img src='{logo_1x}' class='brand-logo' alt='logo'>" if not logo_2x else
+    f"<img src='{logo_1x}' srcset='{logo_1x} 1x, {logo_2x} 2x' class='brand-logo' alt='logo'>"
+)
 
 st.markdown("<div class='header'>", unsafe_allow_html=True)
 st.markdown(
@@ -217,7 +194,7 @@ right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ======================================================
-# 4) 右上角登入/登出
+# 4) 右上角登入/登出（單一登入＋60分鐘逾時）
 # ======================================================
 if "auth" not in st.session_state:
     st.session_state.auth = {
@@ -255,6 +232,7 @@ with right_col:
                         "end_date": info["end_date"],
                         "session_id": sid
                     }
+                    # 單一登入：新登入直接覆蓋舊裝置
                     _touch(input_username, sid)
                     st.success(f"登入成功！歡迎 {info['name']} 😀")
                 else:
