@@ -8,13 +8,19 @@ from PIL import Image
 from datetime import datetime
 import streamlit as st
 
+# 兼容 Python 3.11+（內建 tomllib）與較舊版本（安裝 toml）
+try:
+    import tomllib as toml  # Python 3.11+
+except Exception:  # pragma: no cover
+    import toml  # pip install toml
+
 # === 子模組 ===
 from modules.wrapped_estate import run_estate
 from modules.wrapped_cvgift import run_cvgift
 
-# ===============================
+# ======================================================
 # 0) Favicon 與 Page Config（保證顯示）
-# ===============================
+# ======================================================
 def _load_image(path):
     try:
         return Image.open(path)
@@ -30,6 +36,7 @@ st.set_page_config(
 )
 
 def _inject_favicon(path: str):
+    """有些環境 page_icon 不一定立即生效，額外再注入一次。"""
     try:
         with open(path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
@@ -40,15 +47,14 @@ def _inject_favicon(path: str):
     except Exception:
         pass
 
-# 雙保險：有些環境只用 page_icon 會失效
 if os.path.exists("assets/logo2.png"):
     _inject_favicon("assets/logo2.png")
 elif os.path.exists("assets/logo.png"):
     _inject_favicon("assets/logo.png")
 
-# ===============================
+# ======================================================
 # 1) 單一登入（防共用）與逾時 60 分鐘
-# ===============================
+# ======================================================
 @st.cache_resource
 def _session_registry():
     # username -> {"session_id": str, "last_seen": float}
@@ -71,25 +77,56 @@ def _touch(u, sid):
 
 def _valid(u, sid):
     r = REG.get(u)
-    return bool(r and r.get("session_id") == sid and _now() - r.get("last_seen", 0) <= SESSION_TIMEOUT_SECS)
+    return bool(
+        r and r.get("session_id") == sid and
+        _now() - r.get("last_seen", 0) <= SESSION_TIMEOUT_SECS
+    )
 
 def _logout(u):
     REG.pop(u, None)
 
 _cleanup()
 
-# ===============================
-# 2) 載入使用者（相容你現有 secrets 結構；支援環境變數覆蓋密碼）
-# ===============================
-def _load_users_from_secrets():
+# ======================================================
+# 2) 授權名單：支援 secrets.toml / 環境變數 / 檔內變數
+# ======================================================
+def _parse_users_from_toml_str(toml_str: str) -> dict:
+    if not toml_str or not toml_str.strip():
+        return {}
+    data = toml.loads(toml_str)
+    return data.get("authorized_users", {})
+
+def _read_authorized_users_raw() -> dict:
+    """回傳等價於 secrets['authorized_users'] 的 dict。"""
+    # 1) 優先：.streamlit/secrets.toml 內 [authorized_users]
+    au = st.secrets.get("authorized_users", None)
+    if isinstance(au, dict) and au:
+        return au
+
+    # 2) 其次：環境變數 AUTHORIZED_USERS（內容為 TOML 字串）
+    env_str = os.environ.get("AUTHORIZED_USERS", "")
+    if env_str.strip():
+        return _parse_users_from_toml_str(env_str)
+
+    # 3) 最後：程式內變數 AUTHORIZED_USERS（內容為 TOML 字串）
+    global AUTHORIZED_USERS  # 若未定義會被 except 吃掉
+    try:
+        if isinstance(AUTHORIZED_USERS, str) and AUTHORIZED_USERS.strip():
+            return _parse_users_from_toml_str(AUTHORIZED_USERS)
+    except Exception:
+        pass
+
+    return {}
+
+def _load_users_from_sources():
     """
-    把 secrets 裏的 [authorized_users.*] 轉成 {username(區分大小寫): {...}}。
+    轉成 {username(區分大小寫): {...}}。
     - 可用 section 名稱或內層 username 欄位登入。
-    - 若存在環境變數 AUTH_<USERNAME>_PASSWORD 則覆蓋密碼（例如 AUTH_USER1_PASSWORD）。
+    - AUTH_<USERNAME>_PASSWORD 可覆蓋密碼（例：AUTH_GRACE_PASSWORD）
     """
     users = {}
-    root = st.secrets.get("authorized_users", {})
-    for section_name, d in root.items():
+    raw = _read_authorized_users_raw()
+    for section_name, d in raw.items():
         if not isinstance(d, dict):
             continue
         username = d.get("username", section_name)  # 相容兩種寫法
@@ -104,10 +141,12 @@ def _load_users_from_secrets():
         }
     return users
 
-USERS = _load_users_from_secrets()
+USERS = _load_users_from_sources()
 
 def check_credentials(input_username: str, input_password: str):
     """區分大小寫；支援環境變數覆蓋密碼；檢查有效期間。"""
+    if not USERS:
+        return False, None, "尚未設定授權名單（authorized_users）。請在 secrets 或環境變數設定。"
     info = USERS.get(input_username)
     if not info:
         return False, None, "查無此使用者"
@@ -123,17 +162,17 @@ def check_credentials(input_username: str, input_password: str):
         return False, None, "帳號日期設定格式有誤"
     return True, info, ""
 
-# ===============================
-# 3) 頂部抬頭（Logo RWD + 2x，與標題對齊）
-# ===============================
+# ======================================================
+# 3) 頂部抬頭（Logo RWD + 2x，與標題對齊）— 放大版
+# ======================================================
 st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.brand { display:flex; align-items:center; gap:12px; }
+.brand { display:flex; align-items:center; gap:14px; }
 .brand-title { margin:0; font-size:26px; color:#000; line-height:1; }
-.brand-logo { height:54px; }
-@media (max-width:1200px){ .brand-logo{ height:48px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:40px; } .brand-title{ font-size:22px; } }
+.brand-logo { height:80px; }   /* ← 桌機 80px */
+@media (max-width:1200px){ .brand-logo{ height:64px; } .brand-title{ font-size:24px; } }
+@media (max-width:768px){  .brand-logo{ height:52px; } .brand-title{ font-size:22px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
@@ -154,9 +193,9 @@ st.markdown(
 right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ===============================
+# ======================================================
 # 4) 右上角登入/登出（單一登入＋60分鐘逾時）
-# ===============================
+# ======================================================
 if "auth" not in st.session_state:
     st.session_state.auth = {
         "authenticated": False, "username": "", "name": "", "role": "",
@@ -168,7 +207,9 @@ if st.session_state.auth["authenticated"]:
     u = st.session_state.auth["username"]
     sid = st.session_state.auth["session_id"]
     if not _valid(u, sid):
-        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""}
+        st.session_state.auth = {
+            "authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""
+        }
     else:
         _touch(u, sid)
 
@@ -207,13 +248,16 @@ with right_col:
         with colB:
             if st.button("登出", use_container_width=True):
                 _logout(st.session_state.auth["username"])
-                st.session_state.auth = {"authenticated": False, "username": "", "name": "", "role": "", "end_date": "", "session_id": ""}
+                st.session_state.auth = {
+                    "authenticated": False, "username": "", "name": "", "role": "",
+                    "end_date": "", "session_id": ""
+                }
 
 st.markdown("<hr style='margin-top:6px;margin-bottom:14px;'>", unsafe_allow_html=True)
 
-# ===============================
+# ======================================================
 # 5) 置頂頁籤（平台子模組）
-# ===============================
+# ======================================================
 tab1, tab2 = st.tabs(["AI秒算遺產稅", "保單贈與規劃"])
 
 if not st.session_state.auth["authenticated"]:
