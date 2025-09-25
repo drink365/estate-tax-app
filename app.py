@@ -185,9 +185,9 @@ st.markdown("""
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .brand { display:flex; align-items:center; gap:14px; }
 .brand-title { margin:0; font-size:26px; color:#000; line-height:1; }
-.brand-logo { height:96px; image-rendering:auto; }
-@media (max-width:1200px){ .brand-logo{ height:72px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:60px; } .brand-title{ font-size:22px; } }
+.brand-logo { height:32px; image-rendering:auto; }   /* 桌機縮小為 32px */
+@media (max-width:1200px){ .brand-logo{ height:28px; } .brand-title{ font-size:24px; } }
+@media (max-width:768px){  .brand-logo{ height:24px; } .brand-title{ font-size:22px; } }
 .header-right { display:flex; align-items:center; gap:8px; }
 </style>
 """, unsafe_allow_html=True)
