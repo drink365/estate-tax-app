@@ -103,7 +103,10 @@ class EstateTaxUI:
                     other_dependents_input * self.calculator.constants.OTHER_DEPENDENTS_DEDUCTION
                 ]
             })
-            st.table(df_deductions.astype(int))
+            # 安全轉整數：只轉數值欄，NaN 轉 0，避免 astype(int) 報錯
+num_cols = df_deductions.select_dtypes(include=["float", "int", "int64", "float64"]).columns
+df_deductions[num_cols] = df_deductions[num_cols].fillna(0).round(0).astype(int)
+st.table(df_deductions)
         with col3:
             st.markdown("**稅務計算**")
             st.table(pd.DataFrame({
