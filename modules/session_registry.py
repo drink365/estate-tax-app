@@ -1,4 +1,3 @@
-
 # modules/session_registry.py
 import sqlite3, time, os
 from pathlib import Path
@@ -10,9 +9,9 @@ class SessionRegistry:
     """
     Shared session store using SQLite.
     Schema:
-        username TEXT PRIMARY KEY
+        username  TEXT PRIMARY KEY
         session_id TEXT
-        last_seen INTEGER (epoch seconds)
+        last_seen  INTEGER (epoch seconds)
     """
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -20,9 +19,9 @@ class SessionRegistry:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
-                username TEXT PRIMARY KEY,
+                username  TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
-                last_seen INTEGER NOT NULL
+                last_seen  INTEGER NOT NULL
             )""")
             conn.commit()
 
@@ -32,7 +31,9 @@ class SessionRegistry:
             conn.execute("""
             INSERT INTO sessions(username, session_id, last_seen)
             VALUES(?,?,?)
-            ON CONFLICT(username) DO UPDATE SET session_id=excluded.session_id, last_seen=excluded.last_seen
+            ON CONFLICT(username) DO UPDATE SET
+                session_id=excluded.session_id,
+                last_seen=excluded.last_seen
             """, (username, session_id, now))
             conn.commit()
 
