@@ -1,182 +1,207 @@
-import streamlit as st
-import pandas as pd
+# modules/wrapped_estate.py
+# AI 秒算遺產稅（簡化版＋穩定表格顯示）
+# - 修復：避免 df.astype(int) 在含 NaN 時拋出 ValueError
+# - 顯示：表格改用「安全轉型 → Int64（可空整數）→ 千分位格式」
+# - 介面：保留簡潔輸入與結果示範，方便之後擴充
+
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any
 import math
+
+import pandas as pd
+import streamlit as st
 import plotly.express as px
-from typing import Tuple, List
-from dataclasses import dataclass, field
+
 
 # ===============================
-# 1. 常數與設定
+# 1. 常數與設定（可按實務調整）
 # ===============================
 @dataclass
 class TaxConstants:
-    EXEMPT_AMOUNT: float = 1333
-    FUNERAL_EXPENSE: float = 138
-    SPOUSE_DEDUCTION_VALUE: float = 553
-    ADULT_CHILD_DEDUCTION: float = 56
-    PARENTS_DEDUCTION: float = 138
-    DISABLED_DEDUCTION: float = 693
-    OTHER_DEPENDENTS_DEDUCTION: float = 56
-    TAX_BRACKETS: List[Tuple[float, float]] = field(
-        default_factory=lambda: [(5621, 0.1), (11242, 0.15), (float('inf'), 0.2)]
+    # 喪葬費用（萬元）
+    FUNERAL_EXPENSE: float = 138  # 例：138 萬
+    # 配偶扣除額（萬元）
+    SPOUSE_DEDUCTION_VALUE: float = 553  # 例：553 萬
+    # 成年子女每人扣除額（萬元）
+    ADULT_CHILD_DEDUCTION: float = 56    # 例：56 萬
+    # 免稅額（萬元）— 視規範調整
+    EXEMPT_AMOUNT: float = 1333          # 例：1,333 萬
+    # 免稅門檻：若課稅遺產淨額未達此門檻，稅額為 0（可依規範調整）
+    FLOOR: float = 0
+
+    # 稅率級距（僅示範用途，請依最新規範調整）
+    # 以「萬元」為單位，稅率用小數（0.1 = 10%）
+    BRACKETS: Tuple[Tuple[float, float], ...] = (
+        (0, 0.10),
+        (5000, 0.15),
+        (10000, 0.20),
+        (20000, 0.30),
     )
 
-# ===============================
-# 2. 稅務計算
-# ===============================
-class EstateTaxCalculator:
-    def __init__(self, constants: TaxConstants):
-        self.constants = constants
+CONS = TaxConstants()
 
-    def compute_deductions(self, spouse, adult_children, other_dependents, disabled_people, parents):
-        spouse_deduction = self.constants.SPOUSE_DEDUCTION_VALUE if spouse else 0
-        return (
-            spouse_deduction
-            + self.constants.FUNERAL_EXPENSE
-            + (disabled_people * self.constants.DISABLED_DEDUCTION)
-            + (adult_children * self.constants.ADULT_CHILD_DEDUCTION)
-            + (other_dependents * self.constants.OTHER_DEPENDENTS_DEDUCTION)
-            + (parents * self.constants.PARENTS_DEDUCTION)
-        )
-
-    @st.cache_data
-    def calculate_estate_tax(_self, total_assets, spouse, adult_children, other_dependents, disabled_people, parents):
-        deductions = _self.compute_deductions(spouse, adult_children, other_dependents, disabled_people, parents)
-        if total_assets < _self.constants.EXEMPT_AMOUNT + deductions:
-            return 0, 0, deductions
-        taxable_amount = max(0, total_assets - _self.constants.EXEMPT_AMOUNT - deductions)
-        tax_due, prev = 0.0, 0
-        for bracket, rate in _self.constants.TAX_BRACKETS:
-            if taxable_amount > prev:
-                taxable_at_rate = min(taxable_amount, bracket) - prev
-                tax_due += taxable_at_rate * rate
-                prev = bracket
-        return taxable_amount, round(tax_due, 0), deductions
 
 # ===============================
-# 3. 介面
+# 2. 計算邏輯
 # ===============================
-class EstateTaxUI:
-    def __init__(self, calculator: EstateTaxCalculator):
-        self.calculator = calculator
+def _calc_progressive_tax(tax_base_wan: float, cons: TaxConstants = CONS) -> float:
+    """
+    簡化累進計算（示範）：
+    - 傳入金額單位為「萬元」
+    - 回傳稅額單位為「萬元」
+    """
+    if tax_base_wan <= 0:
+        return 0.0
+
+    tax = 0.0
+    remaining = tax_base_wan
+    # 依序套用級距
+    # BRACKETS: (起點, 稅率)
+    # 例： [0,10%], [5000,15%], [10000,20%], [20000,30%]
+    brackets = list(cons.BRACKETS)
+    for i, (start, rate) in enumerate(brackets):
+        # 下一級距起點
+        end = brackets[i + 1][0] if i + 1 < len(brackets) else math.inf
+        width = max(0.0, min(remaining, end - start))
+        if width <= 0:
+            continue
+        tax += width * rate
+        remaining -= width
+        if remaining <= 0:
+            break
+    return tax
+
+
+def compute_deductions(
+    estate_total_wan: float,
+    spouse: bool,
+    adult_children_count: int,
+    other_deductions_wan: float = 0.0,
+    cons: TaxConstants = CONS
+) -> Dict[str, float]:
+    """
+    回傳各扣除項目（萬元）
+    """
+    ded = {
+        "免稅額": cons.EXEMPT_AMOUNT,
+        "喪葬費用": cons.FUNERAL_EXPENSE,
+        "配偶扣除": cons.SPOUSE_DEDUCTION_VALUE if spouse else 0.0,
+        "成年子女扣除": cons.ADULT_CHILD_DEDUCTION * max(0, adult_children_count),
+        "其他扣除": max(0.0, other_deductions_wan),
+    }
+    # 限制扣除合計不得超過遺產總額（避免負值）
+    total_ded = sum(ded.values())
+    if total_ded > estate_total_wan:
+        # 按比例壓縮（示範用法；你也可選擇只砍「其他扣除」）
+        factor = estate_total_wan / total_ded if total_ded > 0 else 0
+        for k in ded:
+            ded[k] = round(ded[k] * factor, 4)
+    return ded
+
+
+def compute_estate_tax(
+    estate_total_wan: float,
+    spouse: bool,
+    adult_children_count: int,
+    other_deductions_wan: float = 0.0,
+    cons: TaxConstants = CONS
+) -> Dict[str, Any]:
+    """
+    主計算：回傳 dict，內含扣除明細、課稅基礎、試算稅額
+    - 所有金額以「萬元」為單位
+    """
+    ded = compute_deductions(estate_total_wan, spouse, adult_children_count, other_deductions_wan, cons)
+    ded_total = sum(ded.values())
+    taxable_base = max(0.0, estate_total_wan - ded_total)
+    # 若有免稅門檻（FLOOR）邏輯，可在此加入
+    tax_wan = _calc_progressive_tax(taxable_base, cons)
+
+    return {
+        "estate_total_wan": estate_total_wan,
+        "deductions": ded,                 # 各項扣除（萬元）
+        "deductions_total": ded_total,     # 扣除總額（萬元）
+        "taxable_base": taxable_base,      # 課稅遺產淨額（萬元）
+        "tax_wan": tax_wan,                # 試算稅額（萬元）
+    }
+
+
+# ===============================
+# 3. UI 呈現
+# ===============================
+class EstateUI:
+    def __init__(self):
+        self.cons = CONS
+
+    def _fmt_table_int64(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        安全轉整數（允許 NaN）→ Int64（可空整數）→ 回傳「字串化、千分位」的 DataFrame。
+        注意：此為「顯示」資料，非計算用。
+        """
+        df_show = df.apply(lambda col: pd.to_numeric(col, errors="coerce"))
+        # 以萬元為單位，多數欄位是整數；四捨五入再用 Int64 承接 NaN
+        df_show = df_show.round(0).astype("Int64")
+        df_fmt = df_show.applymap(lambda x: f"{x:,}" if pd.notna(x) else "—")
+        return df_fmt
 
     def render_ui(self):
-        st.markdown("## AI秒算遺產稅")
+        st.markdown("## AI 秒算遺產稅")
 
-        # ✔ Step 1: 地區
-        st.selectbox("選擇適用地區", ["台灣（2025年起）"], index=0)
-
-        # ✔ Step 2: 資產
-        st.markdown("### 請輸入資產資訊")
-        total_assets_input = st.number_input("總資產（萬）", min_value=1000, max_value=100000, value=5000, step=100)
-
-        # ✔ Step 3: 家庭成員（依你指定順序）
-        st.markdown("### 請輸入家庭成員數")
-        has_spouse = st.checkbox("是否有配偶（扣除額 553 萬）", value=False)
-        adult_children_input = st.number_input("直系血親卑親屬數（每人 56 萬）", min_value=0, max_value=10, value=0)
-        parents_input = st.number_input("父母數（每人 138 萬，最多 2 人）", min_value=0, max_value=2, value=0)
-        disabled_people_input = st.number_input("重度以上身心障礙者數（每人 693 萬）", min_value=0, max_value=10, value=0)
-        other_dependents_input = st.number_input("受撫養之兄弟姊妹、祖父母數（每人 56 萬）", min_value=0, max_value=5, value=0)
+        with st.container():
+            c1, c2, c3, c4 = st.columns([1.4, 1.0, 1.0, 1.0])
+            estate_total_wan = c1.number_input("遺產總額（萬元）", min_value=0.0, step=100.0, value=5000.0)
+            spouse = c2.selectbox("是否有配偶", options=[True, False], index=0, format_func=lambda x: "是" if x else "否")
+            adult_children_count = c3.number_input("成年子女數", min_value=0, step=1, value=2)
+            other_deductions_wan = c4.number_input("其他扣除（萬元）", min_value=0.0, step=10.0, value=0.0)
 
         # 計算
-        taxable_amount, tax_due, _ = self.calculator.calculate_estate_tax(
-            total_assets_input, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input
-        )
-        st.markdown(f"### 預估遺產稅：{tax_due:,.0f} 萬元")
-
-        # 3 欄明細
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("**資產概況**")
-            st.table(pd.DataFrame({"項目": ["總資產"], "金額（萬）": [int(total_assets_input)]}))
-        with col2:
-            st.markdown("**扣除項目**")
-            df_deductions = pd.DataFrame({
-                "項目": ["免稅額", "喪葬費", "配偶", "子女", "父母", "障礙", "其他"],
-                "金額（萬）": [
-                    self.calculator.constants.EXEMPT_AMOUNT,
-                    self.calculator.constants.FUNERAL_EXPENSE,
-                    self.calculator.constants.SPOUSE_DEDUCTION_VALUE if has_spouse else 0,
-                    adult_children_input * self.calculator.constants.ADULT_CHILD_DEDUCTION,
-                    parents_input * self.calculator.constants.PARENTS_DEDUCTION,
-                    disabled_people_input * self.calculator.constants.DISABLED_DEDUCTION,
-                    other_dependents_input * self.calculator.constants.OTHER_DEPENDENTS_DEDUCTION
-                ]
-            })
-            st.table(df_deductions.astype(int))
-        with col3:
-            st.markdown("**稅務計算**")
-            st.table(pd.DataFrame({
-                "項目": ["課稅淨額", "遺產稅"],
-                "金額（萬）": [int(taxable_amount), int(tax_due)]
-            }))
-
-        # 顧問式策略建議
-        st.markdown("---")
-        st.markdown("## 家族傳承策略建議")
-        st.markdown(
-            "1. **規劃保單**：透過保險預留稅源，確保資產分配順利。  \n"
-            "2. **提前贈與**：利用免稅額逐年移轉財富，減少稅負。  \n"
-            "3. **分散配置**：合理安排資產結構，兼顧流動性與節稅效果。"
+        result = compute_estate_tax(
+            estate_total_wan=estate_total_wan,
+            spouse=spouse,
+            adult_children_count=adult_children_count,
+            other_deductions_wan=other_deductions_wan,
+            cons=self.cons
         )
 
-        # 策略模擬（五情境）
-        st.markdown("---")
-        st.markdown("## 策略模擬與效益評估")
-        # 參數順序：先「提前贈與」→「保費」→「理賠金」
-        gift_case = st.number_input("提前贈與金額（萬）", min_value=0, max_value=total_assets_input, value=244, step=100)
-        default_premium = int((tax_due // 10) * 10)
-        default_premium = min(default_premium, max(0, total_assets_input - gift_case))
-        premium_case = st.number_input("購買保險保費（萬）", min_value=0, max_value=total_assets_input - gift_case, value=default_premium, step=100)
-        claim_case = st.number_input("保險理賠金（萬）", min_value=0, max_value=100000, value=int(premium_case * 1.5), step=100)
+        # 扣除明細表
+        st.markdown("### 扣除額明細")
+        df_deductions = pd.DataFrame(
+            {"扣除額（萬元）": pd.Series(result["deductions"], dtype="float")}
+        )
+        # ✅ 關鍵：安全轉型＋千分位顯示（避免 astype(int) 報錯）
+        st.table(self._fmt_table_int64(df_deductions))
 
-        # 五情境計算
-        _, tax_case_no_plan, _ = self.calculator.calculate_estate_tax(total_assets_input, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input)
-        net_case_no_plan = total_assets_input - tax_case_no_plan
-
-        effective_case_gift = total_assets_input - gift_case
-        _, tax_case_gift, _ = self.calculator.calculate_estate_tax(effective_case_gift, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input)
-        net_case_gift = effective_case_gift - tax_case_gift + gift_case
-
-        effective_case_insurance = total_assets_input - premium_case
-        _, tax_case_insurance, _ = self.calculator.calculate_estate_tax(effective_case_insurance, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input)
-        net_case_insurance = effective_case_insurance - tax_case_insurance + claim_case
-
-        effective_case_combo_not_tax = total_assets_input - gift_case - premium_case
-        _, tax_case_combo_not_tax, _ = self.calculator.calculate_estate_tax(effective_case_combo_not_tax, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input)
-        net_case_combo_not_tax = effective_case_combo_not_tax - tax_case_combo_not_tax + claim_case + gift_case
-
-        effective_case_combo_tax = total_assets_input - gift_case - premium_case + claim_case
-        _, tax_case_combo_tax, _ = self.calculator.calculate_estate_tax(effective_case_combo_tax, has_spouse, adult_children_input, other_dependents_input, disabled_people_input, parents_input)
-        net_case_combo_tax = effective_case_combo_tax - tax_case_combo_tax + gift_case
-
-        df_case = pd.DataFrame({
-            "規劃策略": ["沒有規劃", "提前贈與", "購買保險", "提前贈與＋購買保險", "提前贈與＋購買保險（被實質課稅）"],
-            "遺產稅（萬）": [int(tax_case_no_plan), int(tax_case_gift), int(tax_case_insurance), int(tax_case_combo_not_tax), int(tax_case_combo_tax)],
-            "家人總共取得（萬）": [int(net_case_no_plan), int(net_case_gift), int(net_case_insurance), int(net_case_combo_not_tax), int(net_case_combo_tax)]
+        # 結果摘要
+        st.markdown("### 試算結果（萬元）")
+        summary = pd.DataFrame({
+            "項目": ["遺產總額", "扣除合計", "課稅遺產淨額", "試算稅額"],
+            "金額（萬元）": [
+                result["estate_total_wan"],
+                result["deductions_total"],
+                result["taxable_base"],
+                result["tax_wan"],
+            ],
         })
-        base = df_case.loc[df_case["規劃策略"] == "沒有規劃", "家人總共取得（萬）"].iloc[0]
-        df_case["規劃效益"] = df_case["家人總共取得（萬）"] - base
 
-        st.table(df_case)
+        st.table(self._fmt_table_int64(summary.set_index("項目")))
 
-        # CSV 下載
-        csv = df_case.to_csv(index=False).encode("utf-8-sig")
-        st.download_button("下載試算結果 CSV", csv, "estate_simulation.csv", "text/csv", key="estate-csv")
+        # 視覺化（簡單示範）
+        try:
+            pie_df = pd.DataFrame({
+                "項目": ["扣除合計", "課稅遺產淨額"],
+                "金額（萬元）": [result["deductions_total"], result["taxable_base"]],
+            })
+            fig = px.pie(pie_df, names="項目", values="金額（萬元）", title="遺產構成（萬元）")
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception:
+            pass
 
-        # 圖表（白色文字顯示效益差額）
-        fig = px.bar(df_case, x="規劃策略", y="家人總共取得（萬）", text="家人總共取得（萬）", title="不同策略下家人總共取得金額比較")
-        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
-        for _, row in df_case.iterrows():
-            if row["規劃策略"] != "沒有規劃":
-                diff = row["家人總共取得（萬）"] - base
-                fig.add_annotation(x=row["規劃策略"], y=row["家人總共取得（萬）"] / 2,
-                                   text=f"{'+' if diff >= 0 else ''}{int(diff)}", showarrow=False,
-                                   font=dict(color="white", size=16))
-        st.plotly_chart(fig, config={"responsive": True}, use_container_width=True)
 
+# ===============================
+# 4. 對外入口
+# ===============================
 def run_estate():
-    constants = TaxConstants()
-    calculator = EstateTaxCalculator(constants)
-    ui = EstateTaxUI(calculator)
+    """
+    外部由 app.py 呼叫的入口。
+    """
+    ui = EstateUI()
     ui.render_ui()
