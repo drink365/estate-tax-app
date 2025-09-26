@@ -1,16 +1,18 @@
+
 # modules/session_registry.py
 import sqlite3, time, os
 from pathlib import Path
 from typing import Optional, Tuple
 
-DEFAULT_TTL_SECONDS = 2 * 60 * 60  # 2 小時
+DEFAULT_TTL_SECONDS = 2 * 60 * 60  # 2 hours
 
 class SessionRegistry:
     """
-    共享工作階段表（SQLite）
-    - username: TEXT PRIMARY KEY
-    - session_id: TEXT
-    - last_seen: INTEGER (epoch seconds)
+    Shared session store using SQLite.
+    Schema:
+        username TEXT PRIMARY KEY
+        session_id TEXT
+        last_seen INTEGER (epoch seconds)
     """
     def __init__(self, db_path: str):
         self.db_path = db_path

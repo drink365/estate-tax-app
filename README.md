@@ -1,43 +1,14 @@
-# 《影響力》傳承策略平台｜整合版
 
-- 單一登入整合：遺產稅試算 + 保單贈與（內嵌執行，無外連網址）
-- 多使用者（TOML, 環境變數 `AUTHORIZED_USERS`）與**單一會話限制**（避免共用帳號）
-- 60 分鐘無操作自動過期（可用 `SESSION_TTL_SECONDS` 調整）
+# 影響力傳承策略平台（單一登入版）
 
-## AUTHORIZED_USERS 範例（TOML）
+- 單一登入：後登入會踢掉前者（SQLite 共享 sessions）
+- 密碼：只存 bcrypt 雜湊（放在 `.streamlit/secrets.toml` 的 `[users]` 節）
+
+## Secrets 範例
 ```toml
-[authorized_users.admin]
-name = "管理者"
-username = "admin"
-password = "xxx"
-role = "admin"
-start_date = "2025-01-01"
-end_date = "2026-12-31"
-
-[authorized_users.grace]
-name = "Grace"
-username = "grace"
-password = "xxx"
-role = "vip"
-start_date = "2025-01-01"
-end_date = "2026-12-31"
-
-[authorized_users.user1]
-name = "使用者一"
-username = "user1"
-password = "xxx"
-role = "member"
-start_date = "2025-05-01"
-end_date = "2025-07-31"
-```
-> 只有在 `start_date ≤ 今日 ≤ end_date` 的帳號會被當作有效。
-
-## 其他環境變數
-- `SESSION_TTL_SECONDS`：會話逾時秒數（預設 3600 = 60 分鐘）。
-- `SESSION_STORE_PATH`：會話儲存檔案位置（預設 `.sessions.json`）。
-
-## 執行
-```bash
-pip install -r requirements.txt
-streamlit run app.py
+[users.grace]
+name       = "Grace"
+pwd_hash   = "$2b$12$..."
+start_date = "2024-01-01"
+end_date   = "2030-12-31"
 ```
