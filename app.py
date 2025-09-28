@@ -1,8 +1,8 @@
-# app.py — 影響力傳承策略平台（單一登入；bcrypt；logo 36px）
+# app.py — 影響力傳承策略平台（Logo 修正＋登入後隱藏表單＋顯示到期日）
 import os, uuid, base64, hmac
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from PIL import Image
 import streamlit as st
 import bcrypt
@@ -16,26 +16,27 @@ ASSETS_DIR = BASE_DIR / "assets"
 DATA_DIR = BASE_DIR / ".data"
 REGISTRY = SessionRegistry(str(DATA_DIR / "sessions.db"))
 
-def _asset_path(name: str) -> str:
-    return str(ASSETS_DIR / name)
+# ------------------------- Logo helpers -------------------------
+LOGO_CANDIDATES = ["logo.png", "logo2.png", "logo.jpg", "logo.jpeg", "logo.webp"]
 
-@st.cache_data(show_spinner=False)
-def _asset_b64(name: str) -> Optional[str]:
+def _find_logo_path() -> Optional[Path]:
+    for name in LOGO_CANDIDATES:
+        p = ASSETS_DIR / name
+        if p.exists():
+            return p
+    return None
+
+def _asset_b64(path: Path) -> Optional[str]:
     try:
-        with open(ASSETS_DIR / name, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        return base64.b64encode(path.read_bytes()).decode()
     except Exception:
         return None
 
-# 頁面設定（分頁 icon 也會嘗試讀 assets/logo*.png）
-icon_path = _asset_path("logo2.png") if os.path.exists(_asset_path("logo2.png")) else _asset_path("logo.png")
-st.set_page_config(
-    page_title="影響力傳承策略平台",
-    page_icon=Image.open(icon_path) if os.path.exists(icon_path) else "🧭",
-    layout="wide"
-)
+logo_path = _find_logo_path()
+page_icon = Image.open(logo_path) if logo_path else "🧭"
+st.set_page_config(page_title="影響力傳承策略平台", page_icon=page_icon, layout="wide")
 
-# 頂部抬頭與 36px Logo
+# ------------------------- Styles / Header -------------------------
 st.markdown("""
 <style>
 .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -44,85 +45,129 @@ st.markdown("""
 .brand-logo { height:36px; image-rendering:auto; }
 @media (max-width:1200px){ .brand-logo{ height:32px; } .brand-title{ font-size:24px; } }
 @media (max-width:768px){  .brand-logo{ height:28px; } .brand-title{ font-size:22px; } }
+.info-pill { font-size:14px; color:#334155; }
 </style>
 """, unsafe_allow_html=True)
 
-b64_1x = _asset_b64("logo.png")
-logo_img_tag = f"<img src='data:image/png;base64,{b64_1x}' class='brand-logo' alt='logo'>" if b64_1x else ""
 st.markdown("<div class='header'>", unsafe_allow_html=True)
-st.markdown(f"<div class='brand'>{logo_img_tag}<h1 class='brand-title'>影響力傳承策略平台</h1></div>", unsafe_allow_html=True)
+# 左邊：Logo + 標題
+if logo_path:
+    b64 = _asset_b64(logo_path)
+    logo_html = f"<img src='data:image/{logo_path.suffix[1:]};base64,{b64}' class='brand-logo' alt='logo'>" if b64 else ""
+else:
+    logo_html = ""
+st.markdown(f"<div class='brand'>{logo_html}<h1 class='brand-title'>影響力傳承策略平台</h1></div>", unsafe_allow_html=True)
+# 右邊：登入/登出區容器
 right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
-# 只使用 secrets 的 [users]（bcrypt 雜湊）
+# ------------------------- 認證與使用者 -------------------------
 def _load_users_from_secrets() -> Dict[str, Any]:
     try:
         return dict(st.secrets.get("users", {}))
     except Exception:
         return {}
 
+def _find_user(username_input: str, users: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """支援：帳號鍵或顯示名稱（皆不分大小寫）"""
+    u = (username_input or "").strip()
+    if not u: return None, None
+    lower_map = {k.lower(): k for k in users.keys()}
+    key = lower_map.get(u.lower())
+    if key:
+        return key, users[key]
+    # 用顯示名稱比對
+    for k, info in users.items():
+        name = str(info.get("name", "")).strip()
+        if name and name.lower() == u.lower():
+            return k, info
+    return None, None
+
 def _check_password(pwd_plain: str, pwd_hash: str) -> bool:
     try:
-        return bcrypt.checkpw(pwd_plain.encode(), pwd_hash.encode())
+        if pwd_hash is None: return False
+        return bcrypt.checkpw((pwd_plain or "").encode(), str(pwd_hash).strip().encode())
     except Exception:
         return False
 
 def _check_credentials(username: str, password: str):
     users = _load_users_from_secrets()
     if not users:
-        return False, "", "尚未設定 users（請至 Settings ▸ Secrets 貼上使用者設定）"
-    info = users.get(username)
+        return False, "", "", "尚未設定 users（請至 Settings ▸ Secrets 貼上使用者設定）"
+    key, info = _find_user(username, users)
     if not info:
-        return False, "", "查無此使用者"
+        return False, "", "", "查無此使用者（請確認輸入的「帳號」或「姓名」與 Secrets 一致）"
     if not _check_password(password, info.get("pwd_hash", "")):
-        return False, "", "帳密錯誤"
+        return False, "", "", "帳密錯誤"
 
+    # 有效期間（可選）
     s, e = info.get("start_date"), info.get("end_date")
     if s and e:
         try:
             start_date = datetime.fromisoformat(s)
             end_date = datetime.fromisoformat(e)
             if not (start_date <= datetime.today() <= end_date):
-                return False, "", "權限尚未啟用或已過期"
+                return False, "", "", "權限尚未啟用或已過期"
         except Exception:
-            return False, "", "日期格式錯誤（YYYY-MM-DD）"
-    return True, info.get("name", username), ""
+            return False, "", "", "日期格式錯誤（YYYY-MM-DD）"
+
+    display = info.get("name", key)
+    end_date_text = e if e else "未設定"
+    return True, key, display, end_date_text
 
 # Session 狀態
 if "auth" not in st.session_state:
-    st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": ""}
+    st.session_state.auth = {
+        "authenticated": False,
+        "username": "",
+        "name": "",
+        "session_id": "",
+        "end_date": ""
+    }
 
-# 登入區（後登入覆蓋前者 → 單一登入）
+# ------------------------- 登入區（登入後隱藏表單） -------------------------
 with right_col:
     if not st.session_state.auth["authenticated"]:
         with st.form("top_login_inline", clear_on_submit=False):
             c1, c2, c3 = st.columns([2, 2, 1])
-            u = c1.text_input("帳號", placeholder="帳號", label_visibility="collapsed")
+            u = c1.text_input("帳號或姓名", placeholder="帳號或姓名", label_visibility="collapsed")
             p = c2.text_input("密碼", placeholder="密碼", type="password", label_visibility="collapsed")
             ok_btn = c3.form_submit_button("登入")
             if ok_btn:
-                ok, display, msg = _check_credentials(u, p)
+                ok, key, display, end_date_text = _check_credentials(u, p)
                 if ok:
                     new_sid = uuid.uuid4().hex
-                    REGISTRY.upsert(u, new_sid)          # 覆蓋舊 session（踢下線）
+                    REGISTRY.upsert(key, new_sid)         # 單一登入（後登入踢前者）
                     REGISTRY.cleanup_expired()
-                    st.session_state.auth = {"authenticated": True, "username": u, "name": display, "session_id": new_sid}
-                    st.success(f"登入成功！歡迎 {display} 😀")
+                    st.session_state.auth = {
+                        "authenticated": True,
+                        "username": key,
+                        "name": display,
+                        "session_id": new_sid,
+                        "end_date": end_date_text
+                    }
+                    # 顯示歡迎訊息（含到期日），並立刻 rerun 讓表單消失
+                    st.success(f"登入成功！歡迎 {display} 😀（到期日：{end_date_text}）")
+                    st.rerun()
                 else:
-                    st.error(msg or "登入失敗")
+                    st.error(end_date_text or "登入失敗")
     else:
+        # 登入後右上角只顯示歡迎與登出，不再保留表單
         colA, colB = st.columns([5, 1])
         with colA:
             st.markdown(
-                f"<div style='text-align:right;font-size:14px;color:#333;'>歡迎 {st.session_state.auth['name']} 😀</div>",
+                f"<div class='info-pill' style='text-align:right;'>"
+                f"歡迎 {st.session_state.auth['name']} 😀（到期日：{st.session_state.auth.get('end_date','未設定')}）"
+                f"</div>",
                 unsafe_allow_html=True
             )
         with colB:
             if st.button("登出", use_container_width=True):
                 REGISTRY.delete_if_match(st.session_state.auth["username"], st.session_state.auth["session_id"])
-                st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": ""}
+                st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": "", "end_date": ""}
+                st.rerun()
 
-# 會話守護：被別處登入時立即登出；同時做心跳與過期清理
+# ------------------------- 單一登入守護 -------------------------
 def _guard_session():
     auth = st.session_state.auth
     if not auth["authenticated"]:
@@ -130,12 +175,12 @@ def _guard_session():
     row = REGISTRY.get(auth["username"])
     if not row:
         st.warning("你的登入已失效，請重新登入。")
-        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": ""}
+        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": "", "end_date": ""}
         st.stop()
     reg_sid, _ = row
     if not hmac.compare_digest(reg_sid, auth["session_id"]):
         st.warning("你已在其他裝置登入，已將此處登出。")
-        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": ""}
+        st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": "", "end_date": ""}
         st.stop()
     REGISTRY.touch(auth["username"])
     REGISTRY.cleanup_expired()
@@ -144,6 +189,7 @@ _guard_session()
 
 st.markdown("<hr style='margin:6px 0 14px;'>", unsafe_allow_html=True)
 
+# ------------------------- 兩個模組 -------------------------
 tab1, tab2 = st.tabs(["AI秒算遺產稅", "保單贈與規劃"])
 
 if not st.session_state.auth["authenticated"]:
