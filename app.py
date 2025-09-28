@@ -1,4 +1,4 @@
-# app.py — 影響力傳承策略平台（Logo 修正＋登入後隱藏表單＋顯示到期日）
+# app.py — 影響力傳承策略平台（修正：主Logo=logo.png；favicon優先logo2.png；登入後隱藏表單＋顯示到期日）
 import os, uuid, base64, hmac
 from datetime import datetime
 from pathlib import Path
@@ -16,24 +16,26 @@ ASSETS_DIR = BASE_DIR / "assets"
 DATA_DIR = BASE_DIR / ".data"
 REGISTRY = SessionRegistry(str(DATA_DIR / "sessions.db"))
 
-# ------------------------- Logo helpers -------------------------
-LOGO_CANDIDATES = ["logo.png", "logo2.png", "logo.jpg", "logo.jpeg", "logo.webp"]
+# ------------------------- Logo / Favicon -------------------------
+MAIN_LOGO = ASSETS_DIR / "logo.png"  # 只用這個當頁首主Logo
+FAVICON_CANDIDATES = ["logo2.png", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]  # 小圖示優先用 logo2.png
 
-def _find_logo_path() -> Optional[Path]:
-    for name in LOGO_CANDIDATES:
+def _find_favicon_path() -> Optional[Path]:
+    for name in FAVICON_CANDIDATES:
         p = ASSETS_DIR / name
         if p.exists():
             return p
     return None
 
-def _asset_b64(path: Path) -> Optional[str]:
+def _b64_of(path: Path) -> Optional[str]:
     try:
         return base64.b64encode(path.read_bytes()).decode()
     except Exception:
         return None
 
-logo_path = _find_logo_path()
-page_icon = Image.open(logo_path) if logo_path else "🧭"
+# 設定頁面小圖示（favicon）
+favicon_path = _find_favicon_path()
+page_icon = Image.open(favicon_path) if favicon_path else "🧭"
 st.set_page_config(page_title="影響力傳承策略平台", page_icon=page_icon, layout="wide")
 
 # ------------------------- Styles / Header -------------------------
@@ -50,14 +52,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<div class='header'>", unsafe_allow_html=True)
-# 左邊：Logo + 標題
-if logo_path:
-    b64 = _asset_b64(logo_path)
-    logo_html = f"<img src='data:image/{logo_path.suffix[1:]};base64,{b64}' class='brand-logo' alt='logo'>" if b64 else ""
+
+# 左：主Logo（僅讀取 assets/logo.png），讀不到就不顯示
+if MAIN_LOGO.exists():
+    b64 = _b64_of(MAIN_LOGO)
+    mime = f"image/{MAIN_LOGO.suffix[1:].lower()}"
+    logo_html = f"<img src='data:{mime};base64,{b64}' class='brand-logo' alt='logo'>" if b64 else ""
 else:
     logo_html = ""
+
 st.markdown(f"<div class='brand'>{logo_html}<h1 class='brand-title'>影響力傳承策略平台</h1></div>", unsafe_allow_html=True)
-# 右邊：登入/登出區容器
+
+# 右：登入/登出區容器
 right_col = st.container()
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -76,7 +82,6 @@ def _find_user(username_input: str, users: Dict[str, Any]) -> Tuple[Optional[str
     key = lower_map.get(u.lower())
     if key:
         return key, users[key]
-    # 用顯示名稱比對
     for k, info in users.items():
         name = str(info.get("name", "")).strip()
         if name and name.lower() == u.lower():
@@ -100,7 +105,6 @@ def _check_credentials(username: str, password: str):
     if not _check_password(password, info.get("pwd_hash", "")):
         return False, "", "", "帳密錯誤"
 
-    # 有效期間（可選）
     s, e = info.get("start_date"), info.get("end_date")
     if s and e:
         try:
@@ -146,13 +150,11 @@ with right_col:
                         "session_id": new_sid,
                         "end_date": end_date_text
                     }
-                    # 顯示歡迎訊息（含到期日），並立刻 rerun 讓表單消失
                     st.success(f"登入成功！歡迎 {display} 😀（到期日：{end_date_text}）")
-                    st.rerun()
+                    st.rerun()  # 讓表單消失
                 else:
                     st.error(end_date_text or "登入失敗")
     else:
-        # 登入後右上角只顯示歡迎與登出，不再保留表單
         colA, colB = st.columns([5, 1])
         with colA:
             st.markdown(
