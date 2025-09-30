@@ -1,5 +1,5 @@
-# app.py — 影響力傳承策略平台（修正：主Logo=logo.png；favicon優先logo2.png；登入後隱藏表單＋顯示到期日）
-import os, uuid, base64, hmac
+# app.py — 影響力傳承策略平台（主Logo用 st.image，36px；favicon 優先 logo2.png；登入後隱藏表單＋顯示到期日）
+import os, uuid, hmac
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
@@ -17,55 +17,54 @@ DATA_DIR = BASE_DIR / ".data"
 REGISTRY = SessionRegistry(str(DATA_DIR / "sessions.db"))
 
 # ------------------------- Logo / Favicon -------------------------
-MAIN_LOGO = ASSETS_DIR / "logo.png"  # 只用這個當頁首主Logo
-FAVICON_CANDIDATES = ["logo2.png", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]  # 小圖示優先用 logo2.png
+MAIN_LOGO_CANDIDATES = ["logo.png", "Logo.png", "logo.PNG", "logo.jpg", "logo.jpeg", "logo.webp"]  # 主Logo可容錯大小寫/副檔名
+FAVICON_CANDIDATES   = ["logo2.png", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]             # favicon 優先用 logo2.png
 
-def _find_favicon_path() -> Optional[Path]:
-    for name in FAVICON_CANDIDATES:
+def _find_first(candidates) -> Optional[Path]:
+    for name in candidates:
         p = ASSETS_DIR / name
         if p.exists():
             return p
     return None
 
-def _b64_of(path: Path) -> Optional[str]:
+def _open_image_safe(p: Path) -> Optional[Image.Image]:
     try:
-        return base64.b64encode(path.read_bytes()).decode()
+        return Image.open(p)
     except Exception:
         return None
 
 # 設定頁面小圖示（favicon）
-favicon_path = _find_favicon_path()
-page_icon = Image.open(favicon_path) if favicon_path else "🧭"
+favicon_path = _find_first(FAVICON_CANDIDATES)
+page_icon = _open_image_safe(favicon_path) if favicon_path else "🧭"
 st.set_page_config(page_title="影響力傳承策略平台", page_icon=page_icon, layout="wide")
 
-# ------------------------- Styles / Header -------------------------
+# ------------------------- Styles -------------------------
 st.markdown("""
 <style>
-.header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.brand { display:flex; align-items:center; gap:14px; }
-.brand-title { margin:0; font-size:26px; color:#2b2f36; line-height:1; }
-.brand-logo { height:36px; image-rendering:auto; }
-@media (max-width:1200px){ .brand-logo{ height:32px; } .brand-title{ font-size:24px; } }
-@media (max-width:768px){  .brand-logo{ height:28px; } .brand-title{ font-size:22px; } }
+.block-container { padding-top: 1rem; }
+.brand-title { margin:0; font-size:26px; color:#2b2f36; line-height:1.1; }
 .info-pill { font-size:14px; color:#334155; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='header'>", unsafe_allow_html=True)
+# ------------------------- Header（主Logo用 st.image） -------------------------
+logo_path = _find_first(MAIN_LOGO_CANDIDATES)
+col_logo, col_title, col_right = st.columns([1, 8, 3], vertical_alignment="center")
 
-# 左：主Logo（僅讀取 assets/logo.png），讀不到就不顯示
-if MAIN_LOGO.exists():
-    b64 = _b64_of(MAIN_LOGO)
-    mime = f"image/{MAIN_LOGO.suffix[1:].lower()}"
-    logo_html = f"<img src='data:{mime};base64,{b64}' class='brand-logo' alt='logo'>" if b64 else ""
-else:
-    logo_html = ""
+with col_logo:
+    if logo_path:
+        img = _open_image_safe(logo_path)
+        if img is not None:
+            w, h = img.size
+            target_h = 36
+            target_w = max(36, int(w * (target_h / max(1, h))))
+            st.image(img, width=target_w)
 
-st.markdown(f"<div class='brand'>{logo_html}<h1 class='brand-title'>影響力傳承策略平台</h1></div>", unsafe_allow_html=True)
+with col_title:
+    st.markdown("<h1 class='brand-title'>影響力傳承策略平台</h1>", unsafe_allow_html=True)
 
-# 右：登入/登出區容器
-right_col = st.container()
-st.markdown("</div>", unsafe_allow_html=True)
+with col_right:
+    right_col = st.container()
 
 # ------------------------- 認證與使用者 -------------------------
 def _load_users_from_secrets() -> Dict[str, Any]:
