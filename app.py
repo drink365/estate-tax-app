@@ -1,4 +1,4 @@
-# app.py — 影響力傳承策略平台（主Logo用 st.image，36px；favicon 優先 logo2.png；登入後隱藏表單＋顯示到期日）
+# app.py — 影響力傳承策略平台（logo可見性＋避開工具列＋登入後顯示姓名與到期日）
 import os, uuid, hmac
 from datetime import datetime
 from pathlib import Path
@@ -17,11 +17,11 @@ DATA_DIR = BASE_DIR / ".data"
 REGISTRY = SessionRegistry(str(DATA_DIR / "sessions.db"))
 
 # ------------------------- Logo / Favicon -------------------------
-MAIN_LOGO_CANDIDATES = ["logo.png", "Logo.png", "logo.PNG", "logo.jpg", "logo.jpeg", "logo.webp"]  # 主Logo可容錯大小寫/副檔名
-FAVICON_CANDIDATES   = ["logo2.png", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]             # favicon 優先用 logo2.png
+MAIN_LOGO_CANDIDATES = ["logo.png", "Logo.png", "logo.PNG", "logo.jpg", "logo.jpeg", "logo.webp"]  # 主Logo容錯
+FAVICON_CANDIDATES   = ["logo2.png", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp"]             # favicon優先logo2.png
 
-def _find_first(candidates) -> Optional[Path]:
-    for name in candidates:
+def _find_first(cands) -> Optional[Path]:
+    for name in cands:
         p = ASSETS_DIR / name
         if p.exists():
             return p
@@ -33,7 +33,7 @@ def _open_image_safe(p: Path) -> Optional[Image.Image]:
     except Exception:
         return None
 
-# 設定頁面小圖示（favicon）
+# 設定頁面 favicon
 favicon_path = _find_first(FAVICON_CANDIDATES)
 page_icon = _open_image_safe(favicon_path) if favicon_path else "🧭"
 st.set_page_config(page_title="影響力傳承策略平台", page_icon=page_icon, layout="wide")
@@ -42,12 +42,36 @@ st.set_page_config(page_title="影響力傳承策略平台", page_icon=page_icon
 st.markdown("""
 <style>
 .block-container { padding-top: 1rem; }
+
+/* 標題與右側資訊的基本字型 */
 .brand-title { margin:0; font-size:26px; color:#2b2f36; line-height:1.1; }
 .info-pill { font-size:14px; color:#334155; }
+
+/* 右上資訊區：預留空間，避免被 Streamlit 工具列(右上角)遮住 */
+.avoid-toolbar { padding-right: 160px; }   /* 若仍被蓋到可把 160 調大些 */
+
+/* 讓右上資訊 pill 看起來更像標籤 */
+.user-pill {
+  display:inline-block;
+  padding:6px 10px;
+  border:1px solid #E6E8EF;
+  border-radius:10px;
+  background:#fff;
+}
+
+/* 響應式微調 */
+@media (max-width: 1200px){
+  .brand-title { font-size:24px; }
+  .avoid-toolbar { padding-right: 140px; }
+}
+@media (max-width: 768px){
+  .brand-title { font-size:22px; }
+  .avoid-toolbar { padding-right: 120px; }
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------- Header（主Logo用 st.image） -------------------------
+# ------------------------- Header（主Logo用 st.image，最小寬度120） -------------------------
 logo_path = _find_first(MAIN_LOGO_CANDIDATES)
 col_logo, col_title, col_right = st.columns([1, 8, 3], vertical_alignment="center")
 
@@ -57,13 +81,15 @@ with col_logo:
         if img is not None:
             w, h = img.size
             target_h = 36
-            target_w = max(36, int(w * (target_h / max(1, h))))
+            # 依比例計算寬度，同時設定最小寬度 120，避免看起來太小
+            target_w = max(120, int(w * (target_h / max(1, h))))
             st.image(img, width=target_w)
 
 with col_title:
     st.markdown("<h1 class='brand-title'>影響力傳承策略平台</h1>", unsafe_allow_html=True)
 
 with col_right:
+    # 放一個容器，登入後會在這裡顯示歡迎文字（並預留空間避開工具列）
     right_col = st.container()
 
 # ------------------------- 認證與使用者 -------------------------
@@ -154,19 +180,17 @@ with right_col:
                 else:
                     st.error(end_date_text or "登入失敗")
     else:
-        colA, colB = st.columns([5, 1])
-        with colA:
-            st.markdown(
-                f"<div class='info-pill' style='text-align:right;'>"
-                f"歡迎 {st.session_state.auth['name']} 😀（到期日：{st.session_state.auth.get('end_date','未設定')}）"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-        with colB:
-            if st.button("登出", use_container_width=True):
-                REGISTRY.delete_if_match(st.session_state.auth["username"], st.session_state.auth["session_id"])
-                st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": "", "end_date": ""}
-                st.rerun()
+        # 右上角顯示歡迎資訊，並預留空間避開工具列
+        st.markdown(
+            f"<div class='info-pill avoid-toolbar' style='text-align:right;'>"
+            f"<span class='user-pill'>歡迎 {st.session_state.auth['name']} 😀（到期日：{st.session_state.auth.get('end_date','未設定')}）</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+        if st.button("登出", use_container_width=True):
+            REGISTRY.delete_if_match(st.session_state.auth["username"], st.session_state.auth["session_id"])
+            st.session_state.auth = {"authenticated": False, "username": "", "name": "", "session_id": "", "end_date": ""}
+            st.rerun()
 
 # ------------------------- 單一登入守護 -------------------------
 def _guard_session():
@@ -192,14 +216,9 @@ st.markdown("<hr style='margin:6px 0 14px;'>", unsafe_allow_html=True)
 
 # ------------------------- 兩個模組 -------------------------
 tab1, tab2 = st.tabs(["AI秒算遺產稅", "保單贈與規劃"])
-
 if not st.session_state.auth["authenticated"]:
-    with tab1:
-        st.info("此功能需登入後使用。請在右上角先登入。")
-    with tab2:
-        st.info("此功能需登入後使用。請在右上角先登入。")
+    with tab1: st.info("此功能需登入後使用。請在右上角先登入。")
+    with tab2: st.info("此功能需登入後使用。請在右上角先登入。")
 else:
-    with tab1:
-        run_estate()
-    with tab2:
-        run_cvgift()
+    with tab1: run_estate()
+    with tab2: run_cvgift()
